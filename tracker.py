@@ -1,0 +1,289 @@
+import json
+import threading
+import socket
+import random
+import time
+from sys import argv
+from socket import timeout
+from p2pbazaar import trackerPort
+from p2pbazaar.exceptions import *
+
+class Tracker():
+    #Initialize tracker. Does *not* actually start tracking.
+    #inPort: Port the tracker will use to accept incoming connections.
+    #inDebug: Chooses whether to output status messages.
+    def __init__(self, inPort=trackerPort, inDebug=False, inTestMode=False):
+        random.seed()
+        self.debug = inDebug
+        self.testMode = inTestMode
+        self.connectLock = threading.Lock()
+        self.connectLock.acquire()
+        self.quitFlag = False
+        self.listenPort = inPort
+        self.activeNodeDict = {}
+        self.connThreadList = []
+        self.lastConnTime = time.time()
+        self.connectLock.release()
+    
+    #Actually starts tracking on the designated port.
+    def startup(self):
+        self.listenThread = threading.Thread(target = self._listenLoop, name = "ListenThread")
+        self.listenThread.start()
+    
+    #Loop that listens for and accepts incoming connections. Will disconnect if
+    #a connected node does not send a properly formatted ThisIsMe message.
+    #If there are no active connections for 30 seconds, shuts down the tracker
+    #and prompts the user to restart or quit.
+    def _listenLoop(self):
+        #Restart-or-quit loop:
+        while not self.quitFlag:
+            #Initialize and bind listen socket.
+            self.connectLock.acquire()
+            self.listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #In order to prevent program from hanging indefinitely,
+            #listen socket silently times out and restarts every 0.2 seconds.
+            self.listenSocket.settimeout(0.2)
+            self.listenSocket.bind(('127.0.0.1', self.listenPort))
+            self.listenSocket.listen(5)
+            self.connectLock.release()
+            
+            #Listen for and establish new connections.
+            pauseListenFlag = False
+            while not pauseListenFlag:
+                try:
+                    newConn, newConnAddr = self.listenSocket.accept()
+                    '''If a new connection is detected, awaits a ThisIsMe
+                    message containing the new node's listen port.
+                    If none is received after 5 seconds, or if it gets a non-ThisIsMe
+                    message, tracker will send back a NoTIM error message up to 5 times
+                    before giving up and closing the connection.'''
+                    newConnPort = -1
+                    newConn.settimeout(5.0)
+                    failCount = 0
+                    while newConnPort == -1 and failCount <= 5:
+                        try:
+                            recvData = json.loads(newConn.recv(4096).decode('utf-8'))
+                            newConnPort = self._handleFirstTIM(recvData)
+                        except timeout:
+                            pass #Silent timeout
+                        if newConnPort == -1:
+                            self._sendError(inSocket=newConn, inCode="notim")
+                            failCount += 1
+                            if failCount >= 5:
+                                raise BadConnectionException(badConnSocket = newConn, msg="Too many bad ThisIsMe messages!")
+                    '''If the new node *does* send a proper ThisIsMe, tracker assigns it
+                    an ID number and adds the node to its various lists and dicts. It also
+                    resets the time since last connection.'''
+                    newID=random.randint(0, 100000)
+                    self.connectLock.acquire()
+                    while newID in self.activeNodeDict:
+                        newID = random.randint(0, 100000)
+                    newConnDict = {"socket":newConn, "port":newConnPort}
+                    self.activeNodeDict[newID] = newConnDict
+                    newConnThread = threading.Thread(target = self._activeConnLoop, kwargs = {"id":newID, "connDict":newConnDict}, name = "ConnThread{0}".format(newID))
+                    self.connThreadList.append(newConnThread)
+                    self.lastConnTime = time.time()
+                    self.connectLock.release()
+                    newConnThread.start()
+                #Handle a normal timeout. Triggers shutdown ("pause") if no active
+                #connections for 30 seconds.
+                except timeout:
+                    if (not self.activeNodeDict) and ((time.time() - self.lastConnTime) > 30 or (self.testMode and time.time() - self.lastConnTime > 5)):
+                        pauseListenFlag = True
+                #If a node can't seem to get its ThisIsMe right, shut down the connection.
+                except BadConnectionException as e:
+                    self._closeSocket(inSocket = e.badSocket, inID = e.badID, inReceivedDC = False)
+            #This chunk only runs once there have been no active connections
+            #for 30 seconds, and asks the user to restart or quit.
+            if not self.testMode:
+                print "No active connections. Tracker has shut down."
+                shouldQuitInput = ""
+                while shouldQuitInput != 'r' and shouldQuitInput != 'q':
+                    shouldQuitInput = raw_input("Enter 'r' to restart or 'q' to quit: ")[0].lower()
+                    if shouldQuitInput == 'q':
+                        self.quitFlag = True
+                        print "Goodbye!"
+                    elif shouldQuitInput == 'r':
+                        print "Restarting..."
+            else:
+                self.quitFlag = True
+        self._shutdown()
+        
+    #Handles the ThisIsMe message sent by a node connecting to the tracker
+    #for the first time. Needs only to grab a valid listen port.
+    #inData: Dictionary containing the message information.
+    #Returns the port number in the TIM message, otherwise -1 to indicate an error.
+    def _handleFirstTIM(self, inData):
+        try:
+            #Checks that the message is actually a ThisIsMe.
+            if ("type" not in inData) or (inData["type"] != "thisisme"):
+                return -1
+            #Checks that the message contains a valid port number.
+            elif ("port" not in inData) or (inData["port"] <= 0 or inData["port"] >= 65536):
+                return -1
+            else:
+                return inData["port"]
+        #If the port number isn't actually a number, returns an error.
+        except TypeError:
+            return -1
+    
+    #Sends a ThisIsYou message to a node, containing the node's assigned
+    #ID number.
+    #socket: Valid, open socket to send the message to.
+    #ID: Node's newly assigned ID number.
+    def _sendTIY(self, inSocket, inID):
+        message = json.dumps({"type":"thisisyou", "id":inID})
+        inSocket.send(message)
+    
+    #Sends an error message to a node, containing an error
+    #code and an optional human-readable message.
+    #socket: Valid, open socket to send the message to.
+    #code: Short, parseable error code. May check against a list of valid codes.
+    #readableMsg: Optional human-readable message explaining the error.
+    def _sendError(self, inSocket, inCode, inReadableMsg=None):
+        message = None
+        if inReadableMsg != None:
+            message = json.dumps({"type":"error", "code":inCode, "info":inReadableMsg})
+        else:
+            message = json.dumps({"type":"error", "code":inCode})
+        inSocket.send(message)
+    
+    #Sends a ping to a node.
+    def _sendPing(self, inSocket):
+        message = json.dumps({"type":"ping"})
+        inSocket.send(message)
+        
+    def _sendNodeReply(self, inSocket, inID, inPort):
+        message = json.dumps({"type":"nodereply", "id":inID, "port":inPort})
+        inSocket.send(message)
+        
+    def _closeSocket(self, inSocket, inID):
+        #print "Sending DC to socket ID {0}".format(inID)
+        message = ''
+        try:
+            inSocket.send(message)
+        except socket.error:
+            pass
+        inSocket.close()
+        #print "Socket ID {0} closed".format(inID)
+        self.connectLock.acquire()
+        #print "Socket ID {0} close method has lock".format(inID)
+        if inID in self.activeNodeDict:
+            self.activeNodeDict[inID].clear()
+            del self.activeNodeDict[inID]
+        del inSocket
+        self.connectLock.release()
+        #print "Socket ID {0} close method released lock".format(inID)
+        
+    
+    #Loop that pmanages a connection to a single node.
+    #kwargs: Dictionary containing:
+    #   "id": Unique ID number assigned to the node.
+    #   "connDict": Dictionary with socket and listen port for the node.
+    def _activeConnLoop(self, **kwargs):
+        connID = kwargs["id"]
+        connDict = kwargs["connDict"]
+        connSocket = connDict["socket"]
+        connPort = connDict["port"]
+        dcFlag = False
+        connSocket.settimeout(0.2)
+        lastConnTime = time.time()
+        receivedDC = False
+        #Send a ThisIsYou message to the node with its ID number
+        self._sendTIY(inSocket = connSocket, inID = connID)
+        
+        #Now that connection is properly established, await incoming messages.
+        #(Like always, times out silently to avoid hanging.)
+        isExpectingPing = False
+        while not self.quitFlag and not dcFlag:
+            try:
+                received = connSocket.recv(4096).decode('utf-8')
+                if received == "":
+                    dcFlag = True
+                else:
+                    recvData = json.loads(connSocket.recv(4096).decode('utf-8'))
+                    lastConnTime = time.time()
+                    self.handleReceived(inSocket = connSocket, inID = connID, inData = recvData, expectingPing = isExpectingPing)
+                    isExpectingPing = False
+            except timeout:
+                pass
+            deltaTime = time.time() - lastConnTime
+            #if self.debug:
+                #print "Current deltaTime for connection {0}: {1}".format(connID, deltaTime)
+            if deltaTime >= 60 and not dcFlag:
+                dcFlag = True
+                #print "Set DCFlag for ID {0}.".format(connID)
+            elif deltaTime >= 45 and not dcFlag and not self.testMode:
+                self._sendPing(inSocket = connSocket)
+                isExpectingPing = True
+            elif deltaTime >= 30 and not dcFlag:
+                if(self.testMode):
+                    dcFlag = True
+                    #print "Set DCFlag for ID {0}.".format(connID)
+                else:
+                    self._sendPing(inSocket = connSocket)
+                    isExpectingPing = True
+            elif deltaTime >= 15 and not dcFlag:
+                self._sendPing(inSocket = connSocket)
+                isExpectingPing = True
+        #print "Closing socket ID #{0}...".format(connID)
+        self._closeSocket(inSocket = connSocket, inID = connID)
+        return
+    
+    def _shutdown(self):
+        for currentID in self.activeNodeDict:
+            self.connectLock.acquire()
+            self._closeSocket(inSocket = activeNodeDict[currentID], inID = currentID)
+            self.connectLock.release()
+        for currentThread in self.connThreadList:
+            currentThread.join()
+        
+        
+            
+    
+    #Handles incoming messages when the tracker isn't expecting
+    #anything specific. Returns True only if the corresponding
+    #socket sent a disconnect message, False otherwise
+    def handleReceived(self, inSocket, inID, inData, expectingPing = False):
+        if "type" not in inData:
+            self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Missing message type")
+        elif inData["type"] == "thisisme":
+            self.connectLock.acquire()
+            if "port" in inData:
+                try:
+                    if (inData["port"] + 0) > 0:
+                        self.activeNodeDict[inID] = {"socket": inSocket, "port":inData["port"]}
+                    else:
+                        self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Port must be greater than 0.")
+                except TypeError:
+                    self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Port must be a number.")
+            self.connectLock.release()
+        elif inData["type"] == "ping":
+            if not expectingPing:
+                self._sendPing(inSocket = inSocket)
+        elif inData["type"] == "nodereq":
+            targetID = -1
+            self.connectLock.acquire()
+            while targetID in self.activeNodeDict and targetID != inID:
+                targetID = random.choice(self.activeNodeDict.keys())
+            self._sendNodeReply(inSocket = inSocket, inID = targetID, inPort = self.activeNodeDict[targetID]['port'])
+            self.connectLock.release()
+        else: 
+            self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Unrecognized message type.")
+            
+            
+        
+    
+#End of Tracker class.
+
+if __name__ == "__main__":
+    listenPort = trackerPort
+    if "-p" in argv:
+        pIndex = argv.index("-p")
+        if argv[pIndex+1].isdigit() and int(argv[pIndex+1]) > 0 and int(argv[pIndex+1] <= 65535):
+            listenPort = int(argv[pIndex+1])
+    if "-v" in argv:
+        debug = True
+    else:
+        debug = False
+    tracker = Tracker(inPort = listenPort, inDebug = debug)
