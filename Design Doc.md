@@ -30,7 +30,7 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 
 ####Methods:
 
-`joinNetwork(tracker)`: Connects to the Tracker object and selects a random p2pNode in the network to connect to. 
+`joinNetwork(inHostname, inPort)`: Connects to the Tracker object and selects a random p2pNode in the network to connect to. 
 
 `requestOtherNode()`: Requests an ID and port number for another P2PNode from the Tracker.
 
