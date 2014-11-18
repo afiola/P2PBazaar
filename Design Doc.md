@@ -54,6 +54,16 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 
 `activeNodeDict`: Dictionary of active nodes in network. Each key is an integer representing a node’s ID number, each value is the port number used by the node with that ID number.
 
+`debugMode`: Flag that indicates whether or not to output verbose status messages.
+
+`_quitFlag`: Flag that indicates to all running threads that they should shut down ASAP.
+
+`_connectLock`: Lock object. Any thread reading from or writing to `activeNodeDict` or `_lastConnTime` should acquire this first, and release it after the read or write is complete.
+
+`_lastConnTime`: Last time any network activity was detected. 
+
+
+
 ####Methods:
 
 `handleReceived(packetString)`: Handles the data received from a P2PNode.
