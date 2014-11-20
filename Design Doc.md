@@ -14,9 +14,9 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 
 `trackerSocket`: Socket for connection to a Tracker object.
 
-`listenSocket`: Socket for incoming connections. Port is uniquely assigned by tracker, since this is running on a single computer.
+`listenSocket`: Socket for incoming connections. Port is randomly assigned by the OS, since this is running on a single computer.
 
-`connectedNodeList`: List of active socket objects, each representing another p2pNode this p2pNode is connected to.
+`connectedNodeDict`: Dictionary with keys representing ID numbers of P2PNodes this node is connected to. Values are the corresponding socket objects.
 
 `searchRequestsSentList`: List of search request ID numbers that this node has already passed on.
 
@@ -30,23 +30,45 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 
 ####Methods:
 
-`joinNetwork(inHostname, inPort)`: Connects to the Tracker object and selects a random p2pNode in the network to connect to. 
+`trackerConnect(inTrackerPort)`: Connects to tracker and requests an ID number, initiating a tracker-listen thread in the process. Returns a tuple containing (the tracker listen thread object, the assigned ID number).
 
-`requestOtherNode()`: Requests an ID and port number for another P2PNode from the Tracker.
+`requestOtherNode()`: Requests an ID and port number for another P2PNode from the Tracker. Requires an active tracker connection. Returns a tuple containing (the other node's ID, the other node's port number).
 
-`connectNode(otherID)`: Establishes a connection to another P2PNode.
+`connectNode(nodeID)`: Establishes a connection to another P2PNode, initiating a new connection thread in the process. Returns a tuple containing (the new socket object, the new connection thread). 
 
-`disconnectNode(otherID)`: Breaks a connection with a P2PNode. Not recommended!
+`disconnectNode(nodeID)`: Breaks a connection with a P2PNode.
 
 `shutdown()`: Alerts the Tracker that this node will no longer be available for connections, then closes all sockets and enters a ready-for-deletion state.
 
-`handleReceived(packetString)`: Handles the data received from another node; bare P2PNode version calls passOnSearchRequest if it’s a search request, or passOnPathedRequest if it’s a request with a path built in. Otherwise it derps.
+`handleReceivedTracker(inPacketData, inExpectingPing = False, inExpectingNodeRep = False)`: Handles an incoming message from the tracker. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, any other data the calling function may have wanted). Possible messages:
+Message Type | Message Details | Other Factors | Response Message | Other Return Data
+--- | --- | --- | --- | ---
+`ping` | n/a | `inExpectingPing == True` | `None` | `True`
+`ping` | n/a | `inExpectingPing == False` | `type: ping` | `None`
+`error`| `code: notim` | n/a | `type: thisisme, port: self.listenPort` | `None`
+`nodereply`| `id: someID, port: someport` | `None` | `{'id': someID, 'port': somePort}`
 
-`passOnSearchRequest(searchRequest)`: Checks a SearchRequest’s ID first against searchRequestsSentList to see if this node has already passed on this request. If not, waits for the connectionLock to unlock, then checks the request against SearchRequestsReceivedDict, adds its own ID to the search request’s path list, and fires it to any connected nodes that it did not receive the request from. 
+Any other message will result in `None` being returned.
+
+`handleReceivedNode(packetData, inExpectingPing = False, inExpectingTIM = False)`: Handles an incoming message from another P2PNode. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, dictionary containing any other data the calling function may have wanted). Possible messages:
+Message Type    | Message Details               | Other Factors             | Response Message                          | Other Return Data
+---             | ---                           | ---                       | ---                                       | ---
+`ping`          | n/a                           | `inExpectingPing == True` | `None`                                    | `{"pingReceived" : True}`
+`ping`          | n/a                           | `inExpectingPing == False`| `type: ping`                              | `{}`
+`thisisme`      | `id: someID`                  | `inExpectingTIM == True`  | `None`                                    | `{"nodeID" : someID}`
+`error`         | `code: notim`                 | n/a                       | `type: thisisme, id: self.idNum`          | `None`
+`dc`            | n/a                           | n/a                       | `None`                                    | `{"dcFlag" : True}`
+`search`        | `returnpath: someReturnPath`  | n/a                       | `None`                                    | `{"isSearchRequest": True, "origSearchReq" : (entire dictionary representing parsed search request)`
+
+Any other message will result in `None` being returned.
+
+`passOnSearchRequest(searchRequest)`: Checks a SearchRequest’s ID first against searchRequestsSentList to see if this node has already passed on this request. If not, waits for the connectionLock to unlock, then checks the request against SearchRequestsReceivedDict, adds its own ID to the search request’s path list, and fires it to any connected nodes that it did not receive the request from. Returns nothing.
 
 `passOnPathedRequest(request)`: Passes a request with a path down the chain.
 
-###Tracker: Centralized “server” that keeps track of which nodes are in the network and what ports they are using. Does not mediate sales or search requests.
+###Tracker: 
+
+Centralized “server” that keeps track of which nodes are in the network and what ports they are using. Does not mediate sales or search requests.
 
 ####Members: 
 
@@ -219,3 +241,8 @@ type: “nodereply”
 id: Another node’s ID number
 
 port: Corresponding node’s listen port
+
+####Disconnect:
+Alerts the receiving socket that this socket is about to close and no further useful data should be expected.
+
+type: "dc"
