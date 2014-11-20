@@ -41,6 +41,7 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 `shutdown()`: Alerts the Tracker that this node will no longer be available for connections, then closes all sockets and enters a ready-for-deletion state.
 
 `handleReceivedTracker(inPacketData, inExpectingPing = False, inExpectingNodeRep = False)`: Handles an incoming message from the tracker. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, any other data the calling function may have wanted). Possible messages:
+
 Message Type | Message Details | Other Factors | Response Message | Other Return Data
 --- | --- | --- | --- | ---
 `ping` | n/a | `inExpectingPing == True` | `None` | `True`
@@ -51,6 +52,7 @@ Message Type | Message Details | Other Factors | Response Message | Other Return
 Any other message will result in `None` being returned.
 
 `handleReceivedNode(packetData, inExpectingPing = False, inExpectingTIM = False)`: Handles an incoming message from another P2PNode. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, dictionary containing any other data the calling function may have wanted). Possible messages:
+
 Message Type    | Message Details               | Other Factors             | Response Message                          | Other Return Data
 ---             | ---                           | ---                       | ---                                       | ---
 `ping`          | n/a                           | `inExpectingPing == True` | `None`                                    | `{"pingReceived" : True}`
