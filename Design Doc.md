@@ -30,15 +30,15 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 
 ####Methods:
 
-`trackerConnect(inTrackerPort)`: Connects to tracker and requests an ID number, initiating a tracker-listen thread in the process. Returns a tuple containing (the tracker listen thread object, the assigned ID number).
+`trackerConnect(inTrackerPort)`: Connects to tracker. Returns True if the connection is successful and the node receives an ID number.
 
-`requestOtherNode()`: Requests an ID and port number for another P2PNode from the Tracker. Requires an active tracker connection. Returns a tuple containing (the other node's ID, the other node's port number).
+`requestOtherNode(inTrackerSocket)`: Requests an ID and port number for another P2PNode from the Tracker. Returns a tuple with the ID and port numbers if successful; otherwise returns `None`. 
 
-`connectNode(nodeID)`: Establishes a connection to another P2PNode, initiating a new connection thread in the process. Returns a tuple containing (the new socket object, the new connection thread). 
+`connectNode(otherID, otherPort)`: Establishes a connection to another P2PNode. Returns True if the connection was successful, otherwise None.
 
-`disconnectNode(nodeID)`: Breaks a connection with a P2PNode.
+`disconnectNode(otherID)`: Breaks a connection with a P2PNode.
 
-`shutdown()`: Alerts the Tracker that this node will no longer be available for connections, then closes all sockets and enters a ready-for-deletion state.
+`shutdown()`: Sends disconnect messages on all connected sockets, then closes them and enters a ready-for-deletion state.
 
 `handleReceivedTracker(inPacketData, inExpectingPing = False, inExpectingNodeRep = False)`: Handles an incoming message from the tracker. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, any other data the calling function may have wanted). Possible messages:
 
@@ -62,11 +62,7 @@ Message Type    | Message Details               | Other Factors             | Re
 `dc`            | n/a                           | n/a                       | `None`                                    | `{"dcFlag" : True}`
 `search`        | `returnpath: someReturnPath`  | n/a                       | `None`                                    | `{"isSearchRequest": True, "origSearchReq" : (entire dictionary representing parsed search request)`
 
-Any other message will result in `None` being returned.
-
-`passOnSearchRequest(searchRequest)`: Checks a SearchRequest’s ID first against searchRequestsSentList to see if this node has already passed on this request. If not, waits for the connectionLock to unlock, then checks the request against SearchRequestsReceivedDict, adds its own ID to the search request’s path list, and fires it to any connected nodes that it did not receive the request from. Returns nothing.
-
-`passOnPathedRequest(request)`: Passes a request with a path down the chain.
+`passOnSearchRequest(searchRequest)`: Checks a SearchRequest’s ID first against searchRequestsSentList to see if this node has already passed on this request. If not, waits for the connectionLock to unlock, then checks the request against SearchRequestsReceivedDict, adds its own ID to the search request’s path list, and fires it to any connected nodes that it did not receive the request from. 
 
 ###Tracker: 
 
@@ -243,8 +239,3 @@ type: “nodereply”
 id: Another node’s ID number
 
 port: Corresponding node’s listen port
-
-####Disconnect:
-Alerts the receiving socket that this socket is about to close and no further useful data should be expected.
-
-type: "dc"

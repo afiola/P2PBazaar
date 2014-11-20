@@ -28,6 +28,10 @@ class P2PNodeTest(unittest.TestCase):
             pass
         self.mockTrackerListenSocket.close()        
         
+class TrackerConnectTestCase(P2PNodeTest):
+    def runTest(self):
+        trackerThread, self.testNode1.trackerConnect(trackerPort)
+        
 class RequestOtherNodeTestCase(P2PNodeTest):
     def runTest(self):
         self.testNode1.trackerSocket.connect(('localhost', trackerPort))
