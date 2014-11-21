@@ -14,8 +14,26 @@ class P2PNode:
         pass
     
     
-    def joinNetwork(self, inTrackerPort = trackerPort):
+    def trackerConnect(self, inTrackerPort = trackerPort):
         pass
         
+    def requestOtherNode(self, inTrackerSocket):
+        pass
+        
+    def connectNode(self, otherID, otherNodePort):
+        pass
+    
+    def disconnectNode(self, otherID):
+        pass
+        
+    def handleReceivedTracker(self, inPacketData, inExpectingPing = False, inExpectingNodeRep = False):
+        pass
+        
+    def handleReceivedNode(self, inPacketData, inExpectingPing = False, inExpectingTIM = False):
+        pass
+        
+    def passOnSearchRequest(self, searchRequest):
+        pass
+    
     def shutdown(self):
         pass
