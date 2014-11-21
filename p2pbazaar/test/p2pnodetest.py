@@ -90,31 +90,31 @@ class ConnectNodeTestCase(P2PNodeTest):
         self.assertEquals(self.recvData["type"], "thisisme")
         self.assertIn("id", self.recvData)
         thread.join(10)
-        assertIn(otherID, self.testNode1.connectedNodeDict)
+        self.assertIn(otherID, self.testNode1.connectedNodeDict)
         return
 
 class HandleReceivedTrackerTestCase(P2PNodeTest):
     def runTest(self):
         #Test expected ping
         msg = json.dumps({"type":"ping"})
-        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = True), (None, True))
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = True), (None, True))
         
         #Test unexpected ping
         msg = json.dumps({"type":"ping"})
-        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = False), (msg, None))
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = False), (msg, None))
         
         #Test NOTIM error
         msg = json.dumps({"type":"error", "code":"notim"})
         expectedMsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort})
-        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (expectedMessage, None))
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (expectedMessage, None))
         
         #Test node reply
         msg = json.dumps({"type":"nodereply", "id":50, "port":1000})
-        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (None, {"id":50, "port":1000}))
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (None, {"id":50, "port":1000}))
         
         #Test unrecognized message
         msg = json.dumps({"type":"lolwat"})
-        assertIsNone(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        self.assertIsNone(self.testNode1.handleReceivedTracker(inPacketData = msg))
         
         return
         
@@ -122,29 +122,29 @@ class HandleReceivedNodeTestCase(P2PNodeTest):
     def runTest(self):
         #Test expected ping
         msg = json.dumps({"type":"ping"})
-        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingPing = True), (None, True))
+        self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingPing = True), (None, True))
         
         #Test unexpected ping
         msg = json.dumps({"type":"ping"})
-        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingPing = False), (msg, None))
+        self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingPing = False), (msg, None))
         
         #Test expected ThisIsMe
         msg = json.dumps({"type":"thisisme", "id":50})
-        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingTIM = True), (None, {"nodeID":50})
+        self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingTIM = True), (None, {"nodeID":50}))
         
         #Test NOTIM error
         msg = json.dumps({"type":"error", "code":"notim"})
         expectedmsg = json.dumps({"type":"thisisme", "id":self.testNode1.idNum})
-        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
+        self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
         
         #Test disconnect
         msg = json.dumps({"type":"dc"})
-        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
+        self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
         
         #Test search
         msg = json.dumps({"type":"search", "item":"socks", "id":84, "returnPath":[5, 7, 9]})
         expectedDict = {"returnPath":[5, 7, 9], "item":"socks", "id":84}
-        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
+        self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
         
         return
         
@@ -180,27 +180,27 @@ class PassOnSearchTestCase(P2PNodeTest):
         expectedMsg["returnPath"].append(4)
         expectedMsg["type"] = "search"
         
-        assertIn(84, self.testNode1.searchRequestsSentList)
-        assertIn(84, self.testNode1.searchRequestsReceivedDict)
-        assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 9])
-        assertEquals(expectedMsg, recvData1)
-        assertEquals(expectedMsg, recvData2)
+        self.assertIn(84, self.testNode1.searchRequestsSentList)
+        self.assertIn(84, self.testNode1.searchRequestsReceivedDict)
+        self.assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 9])
+        self.assertEquals(expectedMsg, recvData1)
+        self.assertEquals(expectedMsg, recvData2)
         
         searchReq2 = {"returnPath":[5, 7, 1], "item":"socks", "id":76}
         
         self.testNode1.passOnSearchRequest(searchReq2)
         
-        assertRaises(socket.timeout, newSock1.recv, [4096])
+        self.assertRaises(socket.timeout, newSock1.recv, [4096])
         recvData2 = json.loads(newSock2.recv(4096))
         
         expectedMsg = searchReq2
         expectedMsg["returnPath"].append(4)
         expectedMsg["type"] = "search"
         
-        assertIn(84, self.testNode1.searchRequestsSentList)
-        assertIn(84, self.testNode1.searchRequestsReceivedDict)
-        assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 1])
-        assertEquals(expectedMsg, recvData2)
+        self.assertIn(84, self.testNode1.searchRequestsSentList)
+        self.assertIn(84, self.testNode1.searchRequestsReceivedDict)
+        self.assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 1])
+        self.assertEquals(expectedMsg, recvData2)
         
         return
         
