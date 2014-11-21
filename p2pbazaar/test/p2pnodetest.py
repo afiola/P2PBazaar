@@ -36,6 +36,7 @@ class TrackerConnectTestCase(P2PNodeTest):
         id = kwargs["newID"]
         event1.set()
         testNodeTrackerSock, testNodeAddr = self.mockTrackerListenSocket.accept()
+        testNodeTrackerSock.settimeout(5)
         self.recvData = json.loads(testNodeTrackerSock.recv(4096))
         event2.set()
         msg = json.dumps({"type":"thisisyou", "id":id})
@@ -73,6 +74,7 @@ class ConnectNodeTestCase(P2PNodeTest):
     def awaitMessageThread(self, **kwargs):
         event = kwargs["event"]
         testNodeSock, testNodeAddr = self.sendSocket1.accept()
+        testNodeSock.settimeout(5)
         self.recvData = json.loads(testNodeSock.recv(4096))
         return
     
