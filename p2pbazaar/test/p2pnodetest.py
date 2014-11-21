@@ -90,9 +90,119 @@ class ConnectNodeTestCase(P2PNodeTest):
         self.assertEquals(self.recvData["type"], "thisisme")
         self.assertIn("id", self.recvData)
         thread.join(10)
+        assertIn(otherID, self.testNode1.connectedNodeDict)
+        return
+
+class HandleReceivedTrackerTestCase(P2PNodeTest):
+    def runTest(self):
+        #Test expected ping
+        msg = json.dumps({"type":"ping"})
+        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = True), (None, True))
+        
+        #Test unexpected ping
+        msg = json.dumps({"type":"ping"})
+        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = False), (msg, None))
+        
+        #Test NOTIM error
+        msg = json.dumps({"type":"error", "code":"notim"})
+        expectedMsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort})
+        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (expectedMessage, None))
+        
+        #Test node reply
+        msg = json.dumps({"type":"nodereply", "id":50, "port":1000})
+        assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (None, {"id":50, "port":1000}))
+        
+        #Test unrecognized message
+        msg = json.dumps({"type":"lolwat"})
+        assertIsNone(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        
         return
         
+class HandleReceivedNodeTestCase(P2PNodeTest):
+    def runTest(self):
+        #Test expected ping
+        msg = json.dumps({"type":"ping"})
+        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingPing = True), (None, True))
         
+        #Test unexpected ping
+        msg = json.dumps({"type":"ping"})
+        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingPing = False), (msg, None))
+        
+        #Test expected ThisIsMe
+        msg = json.dumps({"type":"thisisme", "id":50})
+        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg, inExpectingTIM = True), (None, {"nodeID":50})
+        
+        #Test NOTIM error
+        msg = json.dumps({"type":"error", "code":"notim"})
+        expectedmsg = json.dumps({"type":"thisisme", "id":self.testNode1.idNum})
+        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
+        
+        #Test disconnect
+        msg = json.dumps({"type":"dc"})
+        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
+        
+        #Test search
+        msg = json.dumps({"type":"search", "item":"socks", "id":84, "returnPath":[5, 7, 9]})
+        expectedDict = {"returnPath":[5, 7, 9], "item":"socks", "id":84}
+        assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
+        
+        return
+        
+class PassOnSearchTestCase(P2PNodeTest):
+    def runTest(self):
+        self.testNode1.searchRequestSentList = [5]
+        socket1 = self.sendSocket1
+        socket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket1.bind(('localhost', 0))
+        socket2.bind(('localhost', 0))
+        socket1.listen(5)
+        socket2.listen(5)
+        self.testNode1.testSocket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.testNode1.testSocket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.testNode1.testSocket1.connect(socket1.getsockname())
+        newSock1, newSock1Addr = socket1.accept()
+        self.testNode1.testSocket2.connect(socket2.getsockname())
+        newSock2, newSock2Addr = socket2.accept()
+        newSock1.settimeout(5)
+        newSock2.settimeout(5)
+        self.testNode1.connectedNodeDict[1] = self.testNode1.testSocket1
+        self.testNode1.connectedNodeDict[2] = self.testNode1.testSocket2
+        self.idNum = 4
+        
+        searchReq1 = {"returnPath":[5, 7, 9], "item":"socks", "id":84}
+        
+        self.testNode1.passOnSearchRequest(searchReq1)
+        
+        recvData1 = json.loads(newSock1.recv(4096))
+        recvData2 = json.loads(newSock2.recv(4096))
+        
+        expectedMsg = searchReq1
+        expectedMsg["returnPath"].append(4)
+        expectedMsg["type"] = "search"
+        
+        assertIn(84, self.testNode1.searchRequestsSentList)
+        assertIn(84, self.testNode1.searchRequestsReceivedDict)
+        assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 9])
+        assertEquals(expectedMsg, recvData1)
+        assertEquals(expectedMsg, recvData2)
+        
+        searchReq2 = {"returnPath":[5, 7, 1], "item":"socks", "id":76}
+        
+        self.testNode1.passOnSearchRequest(searchReq2)
+        
+        assertRaises(socket.timeout, newSock1.recv, [4096])
+        recvData2 = json.loads(newSock2.recv(4096))
+        
+        expectedMsg = searchReq2
+        expectedMsg["returnPath"].append(4)
+        expectedMsg["type"] = "search"
+        
+        assertIn(84, self.testNode1.searchRequestsSentList)
+        assertIn(84, self.testNode1.searchRequestsReceivedDict)
+        assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 1])
+        assertEquals(expectedMsg, recvData2)
+        
+        return
         
 if __name__ == "__main__":
     unittest.main()
