@@ -29,16 +29,28 @@ class P2PNodeTest(unittest.TestCase):
         self.mockTrackerListenSocket.close()        
         
 class TrackerConnectTestCase(P2PNodeTest):
-    def runTest(self):
-        trackerThread, self.testNode1.trackerConnect(trackerPort)
-        
-class RequestOtherNodeTestCase(P2PNodeTest):
-    def runTest(self):
-        self.testNode1.trackerSocket.connect(('localhost', trackerPort))
+    def awaitMessageThread(self, **kwargs):
+        event = kwargs["event"]
+        id = kwargs["newID"]
+        event.set()
         testNodeTrackerSock, testNodeAddr = self.mockTrackerListenSocket.accept()
-        msg = json.dumps({"type":"nodereply", "id":9001, "port":1337})
+        recvData = json.loads(testNodeTrackerSock.recv(4096))
+        assertIn("type", recvData)
+        assertEquals(recvData["type"], "thisisme")
+        assertIn("port", recvData)
+        msg = json.dumps({"type":"thisisyou", "id":id})
         testNodeTrackerSock.send(msg)
-        assertEquals(self.testNode1.requestOtherNode(), {"id":9001, "port":1337})
+        return
+        
+    
+    def runTest(self):
+        newID = 4000
+        event = threading.Event()
+        thread = threading.Thread(target = self.awaitMessageThread, kwargs={"event":event, "newID":newID})
+        thread.run()
+        event.wait()
+        assertTrue(self.testNode1.trackerConnect(trackerPort))
+        return
         
         
 if __name__ == "__main__":
