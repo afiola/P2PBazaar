@@ -141,7 +141,7 @@ class HandleReceivedNodeTestCase(P2PNodeTest):
         
         #Test NOTIM error
         msg = json.dumps({"type":"error", "code":"notim"})
-        expectedmsg = json.dumps({"type":"thisisme", "id":self.testNode1.idNum})
+        expectedmsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort, "id":self.testNode1.idNum})
         self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
         
         #Test disconnect
@@ -149,8 +149,8 @@ class HandleReceivedNodeTestCase(P2PNodeTest):
         self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
         
         #Test search
-        msg = json.dumps({"type":"search", "item":"socks", "id":84, "returnPath":[5, 7, 9]})
         expectedDict = {"returnPath":[5, 7, 9], "item":"socks", "id":84}
+        msg = json.dumps(expectedDict)
         self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
         
         return

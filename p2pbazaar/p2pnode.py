@@ -101,6 +101,20 @@ class P2PNode:
         retData = None
         if inExpectingTIM and "type" in data and data["type"] == "thisisme":
             retData = {"nodeID":data["id"]}
+        elif inExpectingPing:
+            if data["type"] == "ping":
+                retData = True
+        else:
+            if data["type"] == "ping":
+                retMsg = self._makePing()
+            elif data["type"] == "error":
+                if data["code"] == "notim":
+                    retMsg = self._makeTIM()
+            elif data["type"] == "dc":
+                retData = {"dcFlag":True}
+            elif data["type"] == "search":
+                if returnPath in data:
+                    retData = {"isSearchRequest":True, "origSearchReq":data}
         return (retMsg, retData)
             
         
