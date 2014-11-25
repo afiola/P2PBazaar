@@ -105,6 +105,10 @@ class HandleReceivedTrackerTestCase(P2PNodeTest):
         msg = json.dumps({"type":"ping"})
         self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingPing = False), (msg, None))
         
+        #Test expected ThisIsYou
+        msg = json.dumps({"type":"thisisyou", "id":2000})
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg, inExpectingTIY = True), (None, {"newID":2000}))
+        
         #Test NOTIM error
         msg = json.dumps({"type":"error", "code":"notim"})
         expectedMsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort})

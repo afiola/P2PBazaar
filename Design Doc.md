@@ -40,14 +40,15 @@ Arbitrary node in the network. Should be treated as abstract, i.e. only inherite
 
 `shutdown()`: Sends disconnect messages on all connected sockets, then closes them and enters a ready-for-deletion state.
 
-`handleReceivedTracker(inPacketData, inExpectingPing = False, inExpectingNodeRep = False)`: Handles an incoming message from the tracker. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, any other data the calling function may have wanted). Possible messages:
+`handleReceivedTracker(inPacketData, inExpectingPing = False, inExpectingNodeRep = False, inExpectingTIY = False)`: Handles an incoming message from the tracker. Returns a tuple containing (the message to be sent back or None if it is determined none should be sent, any other data the calling function may have wanted). Possible messages:
 
 Message Type | Message Details | Other Factors | Response Message | Other Return Data
 --- | --- | --- | --- | ---
 `ping` | n/a | `inExpectingPing == True` | `None` | `True`
 `ping` | n/a | `inExpectingPing == False` | `type: ping` | `None`
 `error`| `code: notim` | n/a | `type: thisisme, port: self.listenPort` | `None`
-`nodereply`| `id: someID, port: someport` | `None` | `{'id': someID, 'port': somePort}`
+`nodereply`| `id: someID, port: someport` | `None` | `None` | `{'id': someID, 'port': somePort}`
+`thisisyou`| `id: someID` | `inExpectingTIY == True` | `None` | `None` | `{'newID': someID}`
 
 Any other message will result in `None` being returned.
 

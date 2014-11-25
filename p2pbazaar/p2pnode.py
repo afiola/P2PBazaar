@@ -1,5 +1,6 @@
 import socket
 import threading
+import json
 from p2pbazaar import trackerPort
 
 class P2PNode:
@@ -18,7 +19,12 @@ class P2PNode:
     
     
     def trackerConnect(self, inTrackerPort = trackerPort):
-        pass
+        self.trackerConnected = False
+        trackerConnectDoneEvent = threading.Event()
+        self.trackerThread = threading.Thread(target = self._trackerLoop, args = (inTrackerPort, trackerConnectDoneEvent))
+        self.trackerThread.start()
+        trackerConnectDoneEvent.wait(10)
+        return self.trackerConnected
         
     def requestOtherNode(self, inTrackerSocket):
         pass
@@ -29,8 +35,16 @@ class P2PNode:
     def disconnectNode(self, otherID):
         pass
         
-    def handleReceivedTracker(self, inPacketData, inExpectingPing = False, inExpectingNodeRep = False):
-        pass
+    def handleReceivedTracker(self, inPacketData, inExpectingPing = False, inExpectingTIY = False):
+        data = json.loads(inPacketData)
+        retMsg = None
+        retData = None
+        if inExpectingTIY:
+            if data["type"] == "thisisyou":
+                retMsg = None
+                newID = data["id"]
+                retData = {"newID":newID}
+        return (retMsg, retData)
         
     def handleReceivedNode(self, inPacketData, inExpectingPing = False, inExpectingTIM = False):
         pass
@@ -40,6 +54,31 @@ class P2PNode:
     
     def shutdown(self):
         self.shutdownFlag = True
+        
+    def _trackerLoop(self, inTrackerPort, inDoneEvent = threading.Event()):
+        self.trackerSocket.settimeout(5)
+        self.trackerSocket.connect(('localhost', inTrackerPort))
+        msg = self._makeTIM()
+        self.trackerSocket.send(msg)
+        response = self.trackerSocket.recv(4096)
+        nextMsg, responseData = self.handleReceivedTracker(inPacketData = response, inExpectingTIY = True)
+        if "newID" in responseData:
+            self.idNum = responseData["newID"]
+            self.trackerConnected = True
+        else:
+            self.trackerConnected = False
+        inDoneEvent.set()
+        while not self.shutdownFlag:
+            try:
+                response = self.trackerSocket.recv(4096)
+            except socket.timeout:
+                pass
+            else:
+                nextMsg, responseData = self.handleReceivedTracker(inPacketData = response)
+        self.trackerSocket.shutdown(socket.SHUT_RDWR)
+        self.trackerSocket.close()
+        return
+        
         
     def _listenLoop(self):
         self.listenSocket.bind(('localhost', 0))
@@ -97,7 +136,9 @@ class P2PNode:
         nodeSocket.close()
         return
                 
-        
+    def _makeTIM(self):
+        returnMsg = json.dumps({"type":"thisisme", "port":self.listenSocket.getsockname()[1], "id":self.idNum})
+        return returnMsg
         
             
         
