@@ -17,6 +17,8 @@ class P2PNode:
         self.trackerConnected = False
         self.trackerLock = threading.Lock()
         self.dataLock = threading.Lock()
+        self.searchRequestsSentList = []
+        self.searchRequestsReceivedDict = {}
     
     def startup(self):
         self.listenThread = threading.Thread(target = self._listenLoop)
@@ -121,6 +123,21 @@ class P2PNode:
         
     def passOnSearchRequest(self, searchRequest):
         searchID = searchRequest["id"]
+        pathNodeIDs = searchRequest["returnPath"]
+        msg = self._makeSearchReq(searchRequest)
+        self.dataLock.acquire()
+        if searchID not in self.searchRequestsReceivedDict:
+            self.searchRequestsReceivedDict[searchID] = []
+        for id in pathNodeIDs:
+            if id not in self.searchRequestsReceivedDict[searchID]:
+                self.searchRequestsReceivedDict[searchID].append(id)
+        if searchID not in self.searchRequestsSentList:
+            for nodeID in self.connectedNodeDict.keys():
+                if nodeID not in self.searchRequestsReceivedDict[searchID]:
+                    self.connectedNodeDict[nodeID].send(msg)
+        self.searchRequestsSentList.append(searchID)
+        self.dataLock.release()
+        return
         
     
     def shutdown(self):
@@ -229,3 +246,7 @@ class P2PNode:
         returnMsg = json.dumps({"type":"ping"})
         return returnMsg
         
+    def _makeSearchReq(self, searchRequest):
+        searchRequest["returnPath"].append(self.idNum)
+        returnMsg = json.dumps(searchRequest)
+        return returnMsg

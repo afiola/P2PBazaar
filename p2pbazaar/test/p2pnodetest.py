@@ -174,7 +174,6 @@ class PassOnSearchTestCase(P2PNodeTest):
         newSock2.settimeout(5)
         self.testNode1.connectedNodeDict[1] = self.testNode1.testSocket1
         self.testNode1.connectedNodeDict[2] = self.testNode1.testSocket2
-        self.idNum = 4
         
         searchReq1 = {"type":"search", "returnPath":[5, 7, 9], "item":"socks", "id":84}
         
@@ -184,29 +183,24 @@ class PassOnSearchTestCase(P2PNodeTest):
         recvData2 = json.loads(newSock2.recv(4096))
         
         expectedMsg = searchReq1
-        expectedMsg["returnPath"].append(4)
-        expectedMsg["type"] = "search"
         
         self.assertIn(84, self.testNode1.searchRequestsSentList)
         self.assertIn(84, self.testNode1.searchRequestsReceivedDict)
-        self.assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 9])
+        self.assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 9, self.testNode1.idNum])
         self.assertEquals(expectedMsg, recvData1)
         self.assertEquals(expectedMsg, recvData2)
         
         searchReq2 = {"type":"search", "returnPath":[5, 7, 1], "item":"socks", "id":76}
+        expectedMsg = searchReq2
         
         self.testNode1.passOnSearchRequest(searchReq2)
         
-        self.assertRaises(socket.timeout, newSock1.recv, [4096])
+        self.assertRaises(socket.timeout, newSock1.recv, 4096)
         recvData2 = json.loads(newSock2.recv(4096))
         
-        expectedMsg = searchReq2
-        expectedMsg["returnPath"].append(4)
-        expectedMsg["type"] = "search"
-        
-        self.assertIn(84, self.testNode1.searchRequestsSentList)
-        self.assertIn(84, self.testNode1.searchRequestsReceivedDict)
-        self.assertEquals(self.testNode1.searchRequestsReceivedDict[84], [5, 7, 1])
+        self.assertIn(76, self.testNode1.searchRequestsSentList)
+        self.assertIn(76, self.testNode1.searchRequestsReceivedDict)
+        self.assertEquals(self.testNode1.searchRequestsReceivedDict[76], [5, 7, 1, self.testNode1.idNum])
         self.assertEquals(expectedMsg, recvData2)
         
         return
