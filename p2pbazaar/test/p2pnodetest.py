@@ -149,7 +149,7 @@ class HandleReceivedNodeTestCase(P2PNodeTest):
         self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
         
         #Test search
-        expectedDict = {"returnPath":[5, 7, 9], "item":"socks", "id":84}
+        expectedDict = {"type":"search","returnPath":[5, 7, 9], "item":"socks", "id":84}
         msg = json.dumps(expectedDict)
         self.assertEquals(self.testNode1.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
         
