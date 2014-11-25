@@ -12,6 +12,10 @@ class P2PNode:
         self.connectLock = threading.Lock()
         self.listenReadyEvent = threading.Event()
         self.shutdownFlag = False
+        self.nodeReplyEvent = threading.Event()
+        self.lastNodeReply = None
+        self.trackerConnected = False
+        self.trackerLock = threading.Lock()
     
     def startup(self):
         self.listenThread = threading.Thread(target = self._listenLoop)
@@ -26,8 +30,30 @@ class P2PNode:
         trackerConnectDoneEvent.wait(10)
         return self.trackerConnected
         
-    def requestOtherNode(self, inTrackerSocket):
-        pass
+    def requestOtherNode(self, inTrackerSocket = None):
+        trackerSocket = None
+        data = None
+        if inTrackerSocket == None:
+            trackerSocket = self.trackerSocket
+        else:
+            trackerSocket = inTrackerSocket
+        msg = json.dumps({"type":"nodereq"})
+        if self.trackerConnected:
+            self.trackerLock.acquire()
+        trackerSocket.send(msg)
+        if self.trackerConnected:
+            self.trackerLock.release()
+            if not self.nodeReplyEvent.wait(5):
+                return None
+            else:
+                data = self.lastNodeReply
+        else:
+            data = json.loads(trackerSocket.recv(4096))
+        if data["type"] == "nodereply" and "id" in data and "port" in data:
+            return (data["id"], data["port"])
+        else:
+            return None
+        
         
     def connectNode(self, otherID, otherNodePort):
         pass
@@ -69,12 +95,14 @@ class P2PNode:
             self.trackerConnected = False
         inDoneEvent.set()
         while not self.shutdownFlag:
+            self.trackerLock.acquire()
             try:
                 response = self.trackerSocket.recv(4096)
             except socket.timeout:
                 pass
             else:
                 nextMsg, responseData = self.handleReceivedTracker(inPacketData = response)
+            self.trackerLock.release()
         self.trackerSocket.shutdown(socket.SHUT_RDWR)
         self.trackerSocket.close()
         return
