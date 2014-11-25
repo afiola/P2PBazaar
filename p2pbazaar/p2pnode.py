@@ -16,6 +16,7 @@ class P2PNode:
         self.lastNodeReply = None
         self.trackerConnected = False
         self.trackerLock = threading.Lock()
+        self.dataLock = threading.Lock()
     
     def startup(self):
         self.listenThread = threading.Thread(target = self._listenLoop)
@@ -119,7 +120,8 @@ class P2PNode:
             
         
     def passOnSearchRequest(self, searchRequest):
-        pass
+        searchID = searchRequest["id"]
+        
     
     def shutdown(self):
         self.shutdownFlag = True

@@ -176,7 +176,7 @@ class PassOnSearchTestCase(P2PNodeTest):
         self.testNode1.connectedNodeDict[2] = self.testNode1.testSocket2
         self.idNum = 4
         
-        searchReq1 = {"returnPath":[5, 7, 9], "item":"socks", "id":84}
+        searchReq1 = {"type":"search", "returnPath":[5, 7, 9], "item":"socks", "id":84}
         
         self.testNode1.passOnSearchRequest(searchReq1)
         
@@ -193,7 +193,7 @@ class PassOnSearchTestCase(P2PNodeTest):
         self.assertEquals(expectedMsg, recvData1)
         self.assertEquals(expectedMsg, recvData2)
         
-        searchReq2 = {"returnPath":[5, 7, 1], "item":"socks", "id":76}
+        searchReq2 = {"type":"search", "returnPath":[5, 7, 1], "item":"socks", "id":76}
         
         self.testNode1.passOnSearchRequest(searchReq2)
         
