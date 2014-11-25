@@ -294,12 +294,15 @@ class Tracker():
                     #print "Sending ping to {0}".format(inID)
                 self._sendPing(inSocket = inSocket)
         elif inData["type"] == "nodereq":
-            targetID = -1
-            self.connectLock.acquire()
-            while targetID not in self.activeNodeDict or targetID == inID:
-                targetID = random.choice(self.activeNodeDict.keys())
-            if self.debug:
-                #print "Sending NodeReply to {0}".format(inID)
+            if "id" not in inData or inData["id"] <= 0 or inData["id"] not in self.activeNodeDict:
+                targetID = -1
+                self.connectLock.acquire()
+                while targetID not in self.activeNodeDict or targetID == inID:
+                    targetID = random.choice(self.activeNodeDict.keys())
+                if self.debug:
+                    #print "Sending NodeReply to {0}".format(inID)
+            else:
+                targetID = inData["id"]
             self._sendNodeReply(inSocket = inSocket, inID = targetID, inPort = self.activeNodeDict[targetID]['port'])
             self.connectLock.release()
         else: 

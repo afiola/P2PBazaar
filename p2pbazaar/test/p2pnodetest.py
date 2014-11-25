@@ -67,7 +67,7 @@ class RequestNodeTestCase(P2PNodeTest):
         testNodeTrackerSock, testNodeAddr = self.mockTrackerListenSocket.accept()
         msg = json.dumps({"type":"nodereply", "id":1337, "port":otherPort})
         testNodeTrackerSock.send(msg)
-        self.assertEquals(self.testNode1.requestOtherNode(self.testNode1.trackerSocket), (1337, otherPort))
+        self.assertEquals(self.testNode1.requestOtherNode(inTrackerSocket = self.testNode1.trackerSocket), (1337, otherPort))
         return
         
 class ConnectNodeTestCase(P2PNodeTest):

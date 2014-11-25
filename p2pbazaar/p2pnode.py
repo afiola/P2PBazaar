@@ -33,14 +33,14 @@ class P2PNode:
         trackerConnectDoneEvent.wait(10)
         return self.trackerConnected
         
-    def requestOtherNode(self, inTrackerSocket = None):
+    def requestOtherNode(self, inID = -1, inTrackerSocket = None):
         trackerSocket = None
         data = None
         if inTrackerSocket == None:
             trackerSocket = self.trackerSocket
         else:
             trackerSocket = inTrackerSocket
-        msg = json.dumps({"type":"nodereq"})
+        msg = self._makeNodeReq(inID = inID)
         if self.trackerConnected:
             self.trackerLock.acquire()
         trackerSocket.send(msg)
@@ -255,4 +255,8 @@ class P2PNode:
         
     def _makeDC(self):
         returnMsg = json.dumps({"type":"dc"})
+        return returnMsg
+        
+    def _makeNodeReq(self, inID = -1):
+        returnMsg = json.dumps({"type":"nodereq", "id":inID})
         return returnMsg
