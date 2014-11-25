@@ -56,7 +56,16 @@ class P2PNode:
         
         
     def connectNode(self, otherID, otherNodePort):
-        pass
+        newSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        newSocket.connect(('localhost', otherNodePort))
+        doneEvent = threading.Event()
+        newSockThread = threading.Thread(target = self._nodeConnectionLoop, kwargs = {"socket":newSocket, "addr":newSocket.getsockname(), "originHere":True, "event":doneEvent, "otherID":otherID})
+        newSockThread.start()
+        if doneEvent.wait(5):
+            return True
+        else:
+            return False
+        
     
     def disconnectNode(self, otherID):
         pass
@@ -73,7 +82,13 @@ class P2PNode:
         return (retMsg, retData)
         
     def handleReceivedNode(self, inPacketData, inExpectingPing = False, inExpectingTIM = False):
-        pass
+        data = json.loads(inPacketData)
+        retMsg = None
+        retData = None
+        if inExpectingTIM and "type" in data and data["type"] == "thisisme":
+            retData = {"nodeID":data["id"]}
+        return (retMsg, retData)
+            
         
     def passOnSearchRequest(self, searchRequest):
         pass
@@ -93,15 +108,19 @@ class P2PNode:
             self.trackerConnected = True
         else:
             self.trackerConnected = False
+        dcFlag = False
         inDoneEvent.set()
-        while not self.shutdownFlag:
+        while not self.shutdownFlag and not dcFlag:
             self.trackerLock.acquire()
             try:
                 response = self.trackerSocket.recv(4096)
             except socket.timeout:
                 pass
             else:
-                nextMsg, responseData = self.handleReceivedTracker(inPacketData = response)
+                if response != "":
+                    nextMsg, responseData = self.handleReceivedTracker(inPacketData = response)
+                else:
+                    dcFlag = True
             self.trackerLock.release()
         self.trackerSocket.shutdown(socket.SHUT_RDWR)
         self.trackerSocket.close()
@@ -128,10 +147,13 @@ class P2PNode:
         nodeSocket = kwargs["socket"]
         nodePort = kwargs["addr"][1]
         otherID = kwargs["otherID"]
+        doneEvent = None
+        if "event" in kwargs:
+            doneEvent = kwargs["event"]
         dcFlag = False
         nodeSocket.settimeout(5)
         if kwargs["originHere"]:
-            msg = self._makeTIM(sendID = True, sendPort = False)
+            msg = self._makeTIM()
             nodeSocket.send(msg)
         else:
             while otherID == -1:
@@ -140,10 +162,12 @@ class P2PNode:
                 except socket.timeout:
                     continue
                 else:
-                    responseMSG, data = handleReceivedNode(inPacketData = recvData, inExpectingTIM = True)
+                    responseMSG, data = self.handleReceivedNode(inPacketData = recvData, inExpectingTIM = True)
                     if "nodeID" in data:
                         otherID = data["nodeID"]
         self.connectedNodeDict[otherID] = nodeSocket
+        if doneEvent != None:
+            doneEvent.set()
         sentPing = False
         while not self.shutdownFlag and not dcFlag:
             try:
@@ -152,14 +176,17 @@ class P2PNode:
                 continue
             else:
                 sentPing = False
-                responseMSG, data = handleReceivedNode(inPacketData = recvData, inExpectingPing = sentPing)
-                if responseMSG:
-                    nodeSocket.send(responseMSG)
-                if data:
-                    if "dcFlag" in data and data["dcFlag"]:
-                        dcFlag = True
-                    elif "isSearchRequest" in data and data["isSearchRequest"]:
-                        passOnSearchRequest(data["origSearchReq"])
+                if recvData != "":
+                    responseMSG, data = self.handleReceivedNode(inPacketData = recvData, inExpectingPing = sentPing)
+                    if responseMSG:
+                        nodeSocket.send(responseMSG)
+                    if data:
+                        if "dcFlag" in data and data["dcFlag"]:
+                            dcFlag = True
+                        elif "isSearchRequest" in data and data["isSearchRequest"]:
+                            passOnSearchRequest(data["origSearchReq"])
+                else:
+                    dcFlag = True
         nodeSocket.shutdown(socket.SHUT_RDWR)
         nodeSocket.close()
         return

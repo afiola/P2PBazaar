@@ -76,6 +76,7 @@ class ConnectNodeTestCase(P2PNodeTest):
         testNodeSock, testNodeAddr = self.sendSocket1.accept()
         testNodeSock.settimeout(5)
         self.recvData = json.loads(testNodeSock.recv(4096))
+        event.set()
         return
     
     def runTest(self):
@@ -87,7 +88,7 @@ class ConnectNodeTestCase(P2PNodeTest):
         thread = threading.Thread(target = self.awaitMessageThread, kwargs = {"event":event})
         thread.start()
         self.assertTrue(self.testNode1.connectNode(otherID, self.sendSocket1.getsockname()[1]))
-        event.wait()
+        event.wait(10)
         self.assertIn("type", self.recvData)
         self.assertEquals(self.recvData["type"], "thisisme")
         self.assertIn("id", self.recvData)
