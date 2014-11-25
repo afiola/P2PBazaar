@@ -72,7 +72,9 @@ class P2PNode:
         
     
     def disconnectNode(self, otherID):
-        pass
+        targetNodeSock = self.connectedNodeDict[otherID]
+        msg = self._makeDC()
+        targetNodeSock.send(msg)
         
     def handleReceivedTracker(self, inPacketData, inExpectingPing = False, inExpectingTIY = False):
         data = json.loads(inPacketData)
@@ -249,4 +251,8 @@ class P2PNode:
     def _makeSearchReq(self, searchRequest):
         searchRequest["returnPath"].append(self.idNum)
         returnMsg = json.dumps(searchRequest)
+        return returnMsg
+        
+    def _makeDC(self):
+        returnMsg = json.dumps({"type":"dc"})
         return returnMsg
