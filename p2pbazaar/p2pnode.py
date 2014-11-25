@@ -113,7 +113,7 @@ class P2PNode:
             elif data["type"] == "dc":
                 retData = {"dcFlag":True}
             elif data["type"] == "search":
-                if returnPath in data:
+                if "returnPath" in data:
                     retData = {"isSearchRequest":True, "origSearchReq":data}
         return (retMsg, retData)
             
