@@ -47,6 +47,7 @@ class P2PNode:
                 return None
             else:
                 data = self.lastNodeReply
+                self.nodeReplyEvent.unset()
         else:
             data = json.loads(trackerSocket.recv(4096))
         if data["type"] == "nodereply" and "id" in data and "port" in data:
@@ -79,6 +80,19 @@ class P2PNode:
                 retMsg = None
                 newID = data["id"]
                 retData = {"newID":newID}
+        elif inExpectingPing:
+            if data["type"] == "ping":
+                retData = True
+        else:
+            if data["type"] == "ping":
+                retMsg = self._makePing()
+            elif data["type"] == "error":
+                if data["code"] == "notim":
+                    retMsg = self._makeTIM()
+            elif data["type"] == "nodereply":
+                retData = {"id":data["id"], "port":data["port"]}
+                self.lastNodeReply = retData
+                self.nodeReplyEvent.set()
         return (retMsg, retData)
         
     def handleReceivedNode(self, inPacketData, inExpectingPing = False, inExpectingTIM = False):
@@ -195,5 +209,7 @@ class P2PNode:
         returnMsg = json.dumps({"type":"thisisme", "port":self.listenSocket.getsockname()[1], "id":self.idNum})
         return returnMsg
         
-            
+    def _makePing(self):
+        returnMsg = json.dumps({"type":"ping"})
+        return returnMsg
         

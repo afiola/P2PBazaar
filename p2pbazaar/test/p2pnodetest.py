@@ -112,8 +112,8 @@ class HandleReceivedTrackerTestCase(P2PNodeTest):
         
         #Test NOTIM error
         msg = json.dumps({"type":"error", "code":"notim"})
-        expectedMsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort})
-        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (expectedMessage, None))
+        expectedMsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort, "id":self.testNode1.idNum})
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (expectedMsg, None))
         
         #Test node reply
         msg = json.dumps({"type":"nodereply", "id":50, "port":1000})
@@ -121,7 +121,7 @@ class HandleReceivedTrackerTestCase(P2PNodeTest):
         
         #Test unrecognized message
         msg = json.dumps({"type":"lolwat"})
-        self.assertIsNone(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        self.assertEquals(self.testNode1.handleReceivedTracker(inPacketData = msg), (None, None))
         
         return
         
