@@ -46,19 +46,39 @@ class SearchItemTestCase(BuyerNodeTest):
         expectedDict = {"type":"search", "returnPath":[self.testNode.idNum], "item":"socks", "id":1}
         
         for item in data:
-            assertIn("type", item)
-            assertEquals(item["type"], expectedDict["type"])
-            assertIn("returnPath", item)
-            assertEquals(item["returnPath"], expectedDict["returnPath"])
-            assertIn("item", item)
-            assertEquals(item["item"], expectedDict["item"])
-            assertIn("id", item)
-            
+            self.assertIn("type", item)
+            self.assertEquals(item["type"], expectedDict["type"])
+            self.assertIn("returnPath", item)
+            self.assertEquals(item["returnPath"], expectedDict["returnPath"])
+            self.assertIn("item", item)
+            self.assertEquals(item["item"], expectedDict["item"])
+            self.assertIn("id", item)
         
         
 class BuyItemTestCase(BuyerNodeTest):
     def runTest(self):
-        pass
+        testSock1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        testSock1.connect(self.mockNode1Listen.getsockname())
+        mockNode1, mockNode1Addr = self.mockNode1Listen.accept()
+        
+        self.testNode.connectedNodeDict[1] = testSock1
+        
+        self.testNode.buyItem(sellerID = 1, targetItem = "socks")
+        
+        recvData = json.loads(mockNode1.recv(4096))
+        
+        self.assertIn("type", recvData)
+        self.assertEquals(recvData["type"], "buy")
+        self.assertIn("item", recvData)
+        self.assertEquals(recvData["item"], "socks")
+        self.assertIn("id", recvData)
+        
+        buyID = recvData["id"]
+        
+        message = json.dumps({"type":"buyOK", "id":buyID})
+        mockNode1.send(message)
+        self.assertTrue(self.testNode.buyCompleteEvent(5))
+        self.assertIn("socks", testNode.shoppingBag)
     
 class HandleReceivedNodeTestCase(BuyerNodeTest):
     def runTest(self):
