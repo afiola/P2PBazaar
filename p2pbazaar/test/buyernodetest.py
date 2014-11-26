@@ -75,14 +75,46 @@ class BuyItemTestCase(BuyerNodeTest):
         
         buyID = recvData["id"]
         
-        message = json.dumps({"type":"buyOK", "id":buyID})
+        message = json.dumps({"type":"buyOK", "item":"socks", "id":buyID})
         mockNode1.send(message)
         self.assertTrue(self.testNode.buyCompleteEvent(5))
         self.assertIn("socks", testNode.shoppingBag)
     
 class HandleReceivedNodeTestCase(BuyerNodeTest):
     def runTest(self):
-        pass
+        
+        #Test expected ping
+        msg = json.dumps({"type":"ping"})
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingPing = True), (None, True))
+        
+        #Test unexpected ping
+        msg = json.dumps({"type":"ping"})
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingPing = False), (msg, None))
+        
+        #Test expected ThisIsMe
+        msg = json.dumps({"type":"thisisme", "id":50})
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingTIM = True), (None, {"nodeID":50}))
+        
+        #Test NOTIM error
+        msg = json.dumps({"type":"error", "code":"notim"})
+        expectedmsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort, "id":self.testNode1.idNum})
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
+        
+        #Test disconnect
+        msg = json.dumps({"type":"dc"})
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
+        
+        #Test search
+        expectedDict = {"type":"search","returnPath":[5, 7, 9], "item":"socks", "id":84}
+        msg = json.dumps(expectedDict)
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
+        
+        #Test search reply
+        msg = json.dumps({"type":"reply", "item":"socks", "id":5})
+        expectedDict = {"isSearchReply":True, "item":"socks", "id":5}
+        self.assertTrue(self.searchReplyEvent(5))
+        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, expectedDict))
+        return
         
 class HandleSearchReplyTestCase(BuyerNodeTest):
     def runTest(self):

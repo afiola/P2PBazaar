@@ -5,7 +5,8 @@ from p2pbazaar import trackerPort
 
 class BuyerNode(P2PNode):
     def __init__(self):
-        buyCompleteEvent = threading.Event()
+        self.buyCompleteEvent = threading.Event()
+        self.searchReplyEvent = threading.Event()
         pass
         
     def searchItem(self, targetItem):

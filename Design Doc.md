@@ -163,7 +163,7 @@ path: Reverse of returnPath in corresponding search
 
 item: Item desired by corresponding search.
 
-id: ID number of corresponding search.
+id: ID number of seller.
 
 ####Buy: 
 
