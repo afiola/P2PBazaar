@@ -56,8 +56,23 @@ class BuyerNode(P2PNode):
             
         
     def handleSearchReply(self, searchReply):
-        pass
-        
+        if "item" in searchReply and "id" in searchReply:
+            targetItem = searchReply["item"]
+            targetID = searchReply["id"]
+            targetNode = None
+            self.dataLock.acquire()
+            if targetID not in self.connectedNodeDict:
+                self.dataLock.release()
+                targetPort = self.requestOtherNode(inID = targetID)[1]
+                self.connectNode(targetID, targetPort)
+                self.dataLock.acquire()
+            targetNode = self.connectedNodeDict[targetID]
+            self.buyTargetDict[targetItem] = targetNode
+            self.dataLock.release()
+            self.buyCompleteEvent.clear()
+            self.buyReadyEvent.set()
+        return
+            
 
     def _makeBuy(self, item, buyID):
         msg = json.dumps({"type":"buy", "id":buyID, "item":item})

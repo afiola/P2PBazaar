@@ -145,22 +145,31 @@ class HandleReceivedNodeTestCase(BuyerNodeTest):
         return
         
 class HandleSearchReplyTestCase(BuyerNodeTest):
+    def awaitMessageThread(self, mockTracker, readyEvent):
+        self.req = json.loads(mockTracker.recv(4096))
+        readyEvent.set()
+        msg = json.dumps({"type":"nodereply", "id":2, "port":self.mockNode2Listen.getsockname()[1]})
+        mockTracker.send(msg)
+        
     def runTest(self):
+        self.testNode.startup()
+        readyEvent = threading.Event()
+        self.req = {}
         self.testNode.trackerSocket.connect(self.mockNode1Listen.getsockname())
         mockTracker, mockTrackerAddr = self.mockNode1Listen.accept()
         mockTracker.settimeout(5)
         self.testNode.shoppingList.append("socks")
         testDict = {"isSearchReply":True, "item":"socks", "id":2}
+        otherThread = threading.Thread(target=self.awaitMessageThread, args=(mockTracker, readyEvent))
+        otherThread.start()
         self.testNode.handleSearchReply(testDict)
-        req = json.loads(mockTracker.recv(4096))
         
-        self.assertIn("type", req)
-        self.assertEquals(req["type"], "nodereq")
-        self.assertIn("id", req)
-        self.assertEquals(req["id"], 2)
-        
-        msg = json.dumps({"type":"nodereply", "id":2, "port":self.mockNode2Listen.getsockname()[1]})
-        mockTracker.send(msg)
+        readyEvent.wait()
+        self.assertIn("type", self.req)
+        self.assertEquals(self.req["type"], "nodereq")
+        self.assertIn("id", self.req)
+        self.assertEquals(self.req["id"], 2)
+       
         mockNode2, mockAddr2 = self.mockNode2Listen.accept()
         mockNode2.settimeout(5)
         
