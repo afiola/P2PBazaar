@@ -109,7 +109,8 @@ class BuyItemTestCase(BuyerNodeTest):
     
 class HandleReceivedNodeTestCase(BuyerNodeTest):
     def runTest(self):
-        
+        self.testNode.startup()
+        self.testNode.listenReadyEvent.wait()
         #Test expected ping
         msg = json.dumps({"type":"ping"})
         self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingPing = True), (None, True))
@@ -124,7 +125,7 @@ class HandleReceivedNodeTestCase(BuyerNodeTest):
         
         #Test NOTIM error
         msg = json.dumps({"type":"error", "code":"notim"})
-        expectedmsg = json.dumps({"type":"thisisme", "port":self.testNode1.listenPort, "id":self.testNode1.idNum})
+        expectedmsg = json.dumps({"type":"thisisme", "port":self.testNode.listenPort, "id":self.testNode.idNum})
         self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
         
         #Test disconnect
@@ -139,7 +140,7 @@ class HandleReceivedNodeTestCase(BuyerNodeTest):
         #Test search reply
         msg = json.dumps({"type":"reply", "item":"socks", "id":5})
         expectedDict = {"isSearchReply":True, "item":"socks", "id":5}
-        self.assertTrue(self.searchReplyEvent.wait(5))
+        self.assertTrue(self.testNode.searchReplyEvent.wait(5))
         self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, expectedDict))
         return
         
