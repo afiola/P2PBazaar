@@ -19,7 +19,14 @@ class BuyerNode(P2PNode):
         random.seed()
         
     def searchItem(self, targetItem):
-        pass
+        searchID = random.randint(1, 1000000)
+        msg = self._makeSearch(item = targetItem, searchID = searchID)
+        self.dataLock.acquire()
+        self.searchRequestsSentList.append(searchID)
+        self.searchRequestsReceivedDict[searchID] = []
+        for node in self.connectedNodeDict.values():
+            node.send(msg)
+        return
         
     def buyItem(self, sellerID, targetItem):
         if sellerID in self.connectedNodeDict:
@@ -76,4 +83,10 @@ class BuyerNode(P2PNode):
 
     def _makeBuy(self, item, buyID):
         msg = json.dumps({"type":"buy", "id":buyID, "item":item})
+        return msg
+        
+    def _makeSearch(self, item, searchID = None):
+        if not searchID:
+            searchID = random.randint(1, 1000000)
+        msg = json.dumps({"type":"search", "returnPath":[self.idNum], "item":item, "id":searchID})
         return msg
