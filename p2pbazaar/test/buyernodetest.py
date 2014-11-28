@@ -25,12 +25,21 @@ class BuyerNodeTest(unittest.TestCase):
     def tearDown(self):
         self.testNode.shutdown()
         del self.testNode
-        self.mockNode1Listen.shutdown(socket.SHUT_RDWR)
-        self.mockNode1Listen.close()
-        self.mockNode2Listen.shutdown(socket.SHUT_RDWR)
-        self.mockNode2Listen.close()
-        self.mockNode3Listen.shutdown(socket.SHUT_RDWR)
-        self.mockNode3Listen.close()
+        try:
+            self.mockNode1Listen.shutdown(socket.SHUT_RDWR)
+            self.mockNode1Listen.close()
+        except socket.error:
+            pass
+        try:
+            self.mockNode2Listen.shutdown(socket.SHUT_RDWR)
+            self.mockNode2Listen.close()
+        except socket.error:
+            pass
+        try:
+            self.mockNode3Listen.shutdown(socket.SHUT_RDWR)
+            self.mockNode3Listen.close()
+        except socket.error:
+            pass
         
 class SearchItemTestCase(BuyerNodeTest):
     def runTest(self):
@@ -94,8 +103,9 @@ class BuyItemTestCase(BuyerNodeTest):
         
         message = json.dumps({"type":"buyOK", "item":"socks", "id":buyID})
         mockNode1.send(message)
-        self.assertTrue(self.testNode.buyCompleteEvent(5))
-        self.assertIn("socks", testNode.shoppingBag)
+        self.testNode.handleReceivedNode(inPacketData = testSock1.recv(4096))
+        self.assertTrue(self.testNode.buyCompleteEvent.wait(5))
+        self.assertIn("socks", self.testNode.shoppingBag)
     
 class HandleReceivedNodeTestCase(BuyerNodeTest):
     def runTest(self):
