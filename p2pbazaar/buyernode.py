@@ -4,10 +4,16 @@ import json
 from p2pbazaar import trackerPort
 
 class BuyerNode(P2PNode):
-    def __init__(self):
+    def __init__(self, *args):
+        P2PNode.__init__(self)
+        self.buyReadyEvent = threading.Event()
         self.buyCompleteEvent = threading.Event()
         self.searchReplyEvent = threading.Event()
-        pass
+        self.shoppingList = []
+        for arg in args:
+            self.shoppingList.append(str(arg))
+        self.shoppingBag = []
+        self.buyTargetDict = {}
         
     def searchItem(self, targetItem):
         pass
