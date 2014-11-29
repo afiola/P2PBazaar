@@ -45,20 +45,22 @@ class BuyerNode(P2PNode):
         data = json.loads(inPacketData)
         retMsg = None
         retData = None
-        if "type" in data and data["type"] == "buyOK":
-            boughtID = data["id"]
-            self.dataLock.acquire()
-            if boughtID in self.pendingBuyDict:
-                boughtItem = self.pendingBuyDict[boughtID]
-                self.shoppingBag.append(boughtItem)
-                if boughtItem in self.shoppingList:
-                    self.shoppingList.remove(boughtItem)
-                self.buyCompleteEvent.set()
-                retData = {"isBoughtItem":True, "id":boughtID, "item":boughtItem}
-            self.dataLock.release()
-            
-        else:
-            return P2PNode.handleReceivedNode(self, inPacketData, inExpectingPing, inExpectingTIM)
+        if "type" in data:
+            if data["type"] == "buyOK":
+                boughtID = data["id"]
+                self.dataLock.acquire()
+                if boughtID in self.pendingBuyDict:
+                    boughtItem = self.pendingBuyDict[boughtID]
+                    self.shoppingBag.append(boughtItem)
+                    if boughtItem in self.shoppingList:
+                        self.shoppingList.remove(boughtItem)
+                    self.buyCompleteEvent.set()
+                    retData = {"isBoughtItem":True, "id":boughtID, "item":boughtItem}
+                self.dataLock.release()
+            elif data["type"] == "reply":
+                pass
+            else:
+                return P2PNode.handleReceivedNode(self, inPacketData, inExpectingPing, inExpectingTIM)
         return (retMsg, retData)
             
         

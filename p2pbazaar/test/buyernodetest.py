@@ -138,8 +138,8 @@ class HandleReceivedNodeTestCase(BuyerNodeTest):
         self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
         
         #Test search reply
-        msg = json.dumps({"type":"reply", "item":"socks", "id":5})
-        expectedDict = {"isSearchReply":True, "item":"socks", "id":5}
+        msg = json.dumps({"type":"reply", "item":"socks", "searchID":5, "sellerID":6})
+        expectedDict = {"isSearchReply":True, "item":"socks", "searchID":5, "sellerID":6}
         self.assertTrue(self.testNode.searchReplyEvent.wait(5))
         self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, expectedDict))
         return
