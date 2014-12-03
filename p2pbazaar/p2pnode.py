@@ -271,7 +271,8 @@ class NodeConnectionThread(threading.Thread):
                 else:
                     self.dcFlag = True
         self.thisNode.dataLock.acquire()
-        del self.thisNode.connectedNodeDict[self.nodeID]
+        if self.nodeID in self.thisNode.connectedNodeDict:
+            del self.thisNode.connectedNodeDict[self.nodeID]
         self.thisNode.dataLock.release()
         try:
             self.nodeSocket.shutdown(socket.SHUT_RDWR)
