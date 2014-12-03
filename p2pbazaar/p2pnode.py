@@ -112,6 +112,7 @@ class P2PNode:
         self.dataLock.acquire()
         for thread in self.connectedNodeDict.values():
             thread.shutdownFlag = True
+        self.dataLock.release()
         self.trackerThread.shutdownFlag = True
         self.listenThread.shutdownFlag = True
                 
@@ -311,6 +312,7 @@ class TrackerConnectionThread(threading.Thread):
         self.thisNode = thisNode
         self.trackerPort = trackerPort
         self.trackerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.trackerSocket.settimeout(5)
         self.connectEvent = threading.Event()
         self.shutdownFlag = False
         self.expectingNodeReply = False
@@ -318,7 +320,6 @@ class TrackerConnectionThread(threading.Thread):
         
         
     def trackerLoop(self):
-        self.trackerSocket.settimeout(5)
         self.trackerSocket.connect(('localhost', self.trackerPort))
         msg = self.thisNode._makeTIM()
         self.trackerSocket.send(msg)
