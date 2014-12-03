@@ -133,17 +133,19 @@ class DisconnectNodeTest(P2PNodeTest):
         msg = self.mockNode.receiveDict()
         self.assertIn("type", msg)
         self.assertEquals(msg["type"], "dc")
+        time.sleep(5)
+        msg = self.mockNode.receive()
+        self.assertEquals(msg, "")
         self.nodeEvent.set()
         
     def runTest(self):
         self.nodeEvent.wait(5)
         self.nodeEvent.clear()
         self.testNode.connectNode(otherID = 2001, otherNodePort = self.mockNode.listenPort)
-        self.nodeEvent.wait(5)
+        self.assertTrue(self.nodeEvent.wait(5))
         self.nodeEvent.clear()
         self.testNode.disconnectNode(otherID = 2001)
-        self.nodeEvent.wait(5)
-        time.sleep(2)
+        self.assertTrue(self.nodeEvent.wait(10))
         self.assertNotIn(2001, self.testNode.connectedNodeDict)
         
 

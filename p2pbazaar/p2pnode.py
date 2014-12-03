@@ -44,6 +44,7 @@ class P2PNode:
         targetNodeThread = self.connectedNodeDict[otherID]
         msg = self._makeDC()
         targetNodeThread.send(msg)
+        targetNodeThread.shutdownFlag = True
         
     def handleReceivedTracker(self, inPacketData):
         data = json.loads(inPacketData)
