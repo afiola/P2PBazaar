@@ -2,6 +2,7 @@ import socket
 import threading
 import unittest
 import json
+import time
 from p2pbazaar.p2pnode import P2PNode
 from p2pbazaar import trackerPort
 from p2pbazaar.test import mocks
@@ -52,7 +53,7 @@ class TrackerConnectTest(P2PNodeTest):
         self.trackerThread.start()
         
     def trackerFunc(self):
-        P2PNode.trackerFunc(self)
+        P2PNodeTest.trackerFunc(self)
         msg = self.mockTracker.receiveDict()
         self.assertIn("type", msg)
         self.assertEquals(msg["type"], "thisisme")
@@ -90,7 +91,7 @@ class RequestNodeTest(P2PNodeTest):
         self.trackerEvent.wait(5)
         self.trackerEvent.clear()
         self.testNode.trackerConnect()
-        self.assertTrue(self.waitEvent.wait(5))
+        self.assertTrue(self.trackerEvent.wait(5))
         self.trackerEvent.clear()
         self.assertTrue(self.testNode.requestOtherNode())
         self.assertTrue(self.trackerEvent.wait(5))
@@ -102,7 +103,7 @@ class ConnectNodeTest(P2PNodeTest):
         self.nodeThread.start()
         
     def nodeFunc(self):
-        P2PNode.nodeFunc(self)
+        P2PNodeTest.nodeFunc(self)
         msg = self.mockNode.receiveDict()
         self.assertIn("type", msg)
         self.assertEquals(msg["type"], "thisisme")
@@ -116,8 +117,8 @@ class ConnectNodeTest(P2PNodeTest):
         self.nodeEvent.wait(5)
         self.nodeEvent.clear()
         self.assertTrue(self.testNode.connectNode(otherID = 2001, otherNodePort = self.mockNode.listenPort))
-        self.waitEvent.wait(5)
-        self.waitEvent.clear()
+        self.nodeEvent.wait(5)
+        self.nodeEvent.clear()
         self.assertIn(2001, self.testNode.connectedNodeDict)
         
 class DisconnectNodeTest(P2PNodeTest):
@@ -126,7 +127,7 @@ class DisconnectNodeTest(P2PNodeTest):
         self.nodeThread.start()
     
     def nodeFunc(self):
-        P2PNode.nodeFunc(self)
+        P2PNodeTest.nodeFunc(self)
         msg = self.mockNode.receiveDict()
         self.waitEvent.set()
         msg = self.mockNode.receiveDict()
@@ -137,7 +138,7 @@ class DisconnectNodeTest(P2PNodeTest):
     def runTest(self):
         self.nodeEvent.wait(5)
         self.nodeEvent.clear()
-        self.testNode.connectNode(otherID = 2001, port = self.mockNode.listenPort)
+        self.testNode.connectNode(otherID = 2001, otherNodePort = self.mockNode.listenPort)
         self.nodeEvent.wait(5)
         self.nodeEvent.clear()
         self.testNode.disconnectNode(otherID = 2001)
@@ -162,19 +163,19 @@ class HandleReceivedTrackerTest(P2PNodeTest):
         
         #Test ping
         msg = json.dumps({"type":"ping"})
-        self.assertTrue(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        self.assertTrue(self.testNode.handleReceivedTracker(inPacketData = msg))
         
         #Test error
         msg = json.dumps({"type":"error"})
-        self.assertTrue(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        self.assertTrue(self.testNode.handleReceivedTracker(inPacketData = msg))
         
         #Test node reply
         msg = json.dumps({"type":"nodereply"})
-        self.assertTrue(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        self.assertTrue(self.testNode.handleReceivedTracker(inPacketData = msg))
         
         #Test unrecognized message
         msg = json.dumps({"type":"lolwat"})
-        self.assertFalse(self.testNode1.handleReceivedTracker(inPacketData = msg))
+        self.assertFalse(self.testNode.handleReceivedTracker(inPacketData = msg))
         
         return
         
@@ -212,7 +213,7 @@ class PassOnSearchTest(P2PNodeTest):
     def runTest(self):
         mockNodeList=[mocks.MockNode(id = (n + 2001)) for n in range(3)]
         for node in mockNodeList:
-            self.testNode.connectNode(node.listenPort)
+            self.testNode.connectNode(node.idNum, node.listenPort)
         recvData = [mockNodeList[n].receiveDict() for n in range(3)]
         
         searchReq1 = {"type":"search", "returnPath":[5, 7, 9], "item":"socks", "id":84}
@@ -275,7 +276,7 @@ class MakeDCTest(P2PNodeTest):
         
 class MakeNodeReqTest(P2PNodeTest):
     def runTest(self):
-        self.testNode[2] = " "
+        self.testNode.connectedNodeDict[2] = " "
         expectedMSG = json.dumps({"type":"nodereq", "idList":[2]})
         self.assertEquals(self.testNode._makeNodeReq(), expectedMSG)
         
@@ -284,7 +285,7 @@ class MakeErrorTest(P2PNodeTest):
         expectedMSG = json.dumps({"type":"error", "code":"bleh"})
         self.assertEquals(self.testNode._makeError(errorCode = "bleh"), expectedMSG)
         expectedMSG = json.dumps({"type":"error", "code":"bleh", "info":"Nothing in particular"})
-        self.assertEquals(self.testNode._makeError(errorCode = "bleh", readableMsg = "Nothing in particular"))
+        self.assertEquals(self.testNode._makeError(errorCode = "bleh", readableMsg = "Nothing in particular"), expectedMSG)
         
 class HandleTIMTest(P2PNodeTest):
     def runTest(self):
@@ -366,16 +367,16 @@ class HandleDCTest(P2PNodeTest):
 class HandleSearchTest(P2PNodeTest):
     def runTest(self):
         data = {}
-        self.assertFalse(self._handleSearch(data))
+        self.assertFalse(self.testNode._handleSearch(data))
         
         data = {"id":3}
-        self.assertFalse(self._handleSearch(data))
+        self.assertFalse(self.testNode._handleSearch(data))
         
         data = {"returnPath":[]}
-        self.assertFalse(self._handleSearch(data))
+        self.assertFalse(self.testNode._handleSearch(data))
         
         data = {"id":3, "returnPath":[]}
-        self.assertTrue(self._handleSearch(data))
+        self.assertTrue(self.testNode._handleSearch(data))
         
 class HandleNodeReplyTest(P2PNodeTest):
     def runTest(self):
@@ -394,7 +395,7 @@ class HandleNodeReplyTest(P2PNodeTest):
         
         self.nodeThread.start()
         self.nodeEvent.wait(5)
-        data = {"id":self.mockNode.id, "port":self.mockNode.listenPort}
+        data = {"id":self.mockNode.idNum, "port":self.mockNode.listenPort}
         self.assertTrue(self.testNode._handleNodeReply(data))
         self.assertFalse(mockThread.expectingNodeReply)
         

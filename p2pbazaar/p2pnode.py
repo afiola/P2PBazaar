@@ -7,8 +7,8 @@ from p2pbazaar import trackerPort
 class P2PNode:
     def __init__(self, inTrackerPort = trackerPort):
         self.idNum = -1
-        self.trackerThread = TrackerConnectionThread(port = inTrackerPort)
-        self.listenThread = ListenThread()
+        self.trackerThread = TrackerConnectionThread(thisNode = self, trackerPort = inTrackerPort)
+        self.listenThread = ListenThread(thisNode = self)
         self.connectedNodeDict = {}
         self.listenReadyEvent = threading.Event()
         self.shutdownFlag = False
@@ -38,7 +38,7 @@ class P2PNode:
         newSocket.connect(('localhost', otherNodePort))
         newSockThread = NodeConnectionThread(thisNode = self, nodeSocket = newSocket, otherID = otherID, originHere = True)
         newSockThread.start()
-        return newSockThread.connectEvent.wait(10)
+        return newSockThread.connectedEvent.wait(10)
     
     def disconnectNode(self, otherID):
         targetNodeThread = self.connectedNodeDict[otherID]
@@ -145,20 +145,20 @@ class P2PNode:
     def _handleTIM(self, inData, connectThread):
         if "id" in inData:
             newID = inData["id"]
-            connectionThread.dataLock.acquire()
-            if connectionThread.nodeID != newID:
+            connectThread.dataLock.acquire()
+            if connectThread.nodeID != newID:
                 self.dataLock.acquire()
-                if connectionThread.nodeID in self.connectedNodeDict:
-                    del self.connectedNodeDict[connectionThread.nodeID]
-                self.connectedNodeDict[newID] = connectionThread
+                if connectThread.nodeID in self.connectedNodeDict:
+                    del self.connectedNodeDict[connectThread.nodeID]
+                self.connectedNodeDict[newID] = connectThread
                 self.dataLock.release()
-                connectionThread.nodeID = newID
-                if not connectionThread.connectedEvent.isSet():
-                    connectionThread.connectedEvent.set()
-                connectionThread.expectingPing = False
-                connectionThread.dataLock.release()
+                connectThread.nodeID = newID
+                if not connectThread.connectedEvent.isSet():
+                    connectThread.connectedEvent.set()
+                connectThread.expectingPing = False
+                connectThread.dataLock.release()
                 return True
-            connectionThread.dataLock.release()
+            connectThread.dataLock.release()
         return False
         
     def _handleTIY(self, inData, connectThread):
@@ -171,26 +171,26 @@ class P2PNode:
         return False
         
     def _handlePing(self, connectThread):
-        if not connectionThread.expectingPing:
+        if not connectThread.expectingPing:
             msg = self._makePing()
-            connectionThread.send(msg)
+            connectThread.send(msg)
             return True
         else:
-            connectionThread.expectingPing = False
+            connectThread.expectingPing = False
             return False
             
     def _handleError(self, inData, connectThread):
         if "code" in inData:
-            errorCode = data["code"]
+            errorCode = inData["code"]
             if errorCode == "notim":
                 msg = self._makeTIM()
-                connectionThread.send(msg)
+                connectThread.send(msg)
                 return ("notim", None)
             return ("Unrecognized message", None)
         return ("Bad message", None)
             
     def _handleDC(self, connectThread):
-        connectionThread.shutdownFlag = True
+        connectThread.shutdownFlag = True
         
     def _handleSearch(self, inData):
         if "id" in inData and "returnPath" in inData:
@@ -202,14 +202,14 @@ class P2PNode:
         if ("id" in inData 
             and "port" in inData
             and self.trackerThread.expectingNodeReply):
-            self.connectNode(otherID = inData["id"], otherPort = inData["port"])
+            self.connectNode(otherID = inData["id"], otherNodePort = inData["port"])
             self.trackerThread.expectingNodeReply = False
             return True
         return False
         
         
 class ListenThread(threading.Thread):
-    def __init__(self, listenSocket, thisNode):
+    def __init__(self, thisNode):
         threading.Thread.__init__(self, target=self.mainLoop)
         self.thisNode = thisNode
         self.shutdownFlag = False
@@ -218,6 +218,7 @@ class ListenThread(threading.Thread):
         self.listenSocket.bind(('localhost', 0))
         self.listenSocket.settimeout(5)
         self.listenSocket.listen(5)
+        self.thisNode.listenSocket = self.listenSocket
         
     def mainLoop(self):
         self.readyEvent.set()
@@ -242,6 +243,7 @@ class NodeConnectionThread(threading.Thread):
         self.nodeSocket.settimeout(5)
         self.sendLock = threading.Lock()
         self.dataLock = threading.Lock()
+        self.shutdownFlag = False
         self.expectingPing = False
         if originHere:
             msg = self.thisNode._makeTIM()
@@ -255,7 +257,7 @@ class NodeConnectionThread(threading.Thread):
     def receiveLoop(self):
         while not self.shutdownFlag and not self.dcFlag:
             try:
-                recvData = nodeSocket.recv(4096)
+                recvData = self.nodeSocket.recv(4096)
             except socket.timeout:
                 continue
             else:
@@ -278,10 +280,10 @@ class NodeConnectionThread(threading.Thread):
         
     def awaitTIM(self):
         if not self.connectedEvent.wait(3):
-            msg = self.thisNode._makeError(code = "notim")
+            msg = self.thisNode._makeError(errorCode = "notim")
             self.send(msg)
         if not self.connectedEvent.wait(3):
-            msg = self.thisNode._makeError(code = "notim")
+            msg = self.thisNode._makeError(errorCode = "notim")
             self.send(msg)
         if not self.connectedEvent.wait(4):
             self.dcFlag = True
@@ -297,14 +299,14 @@ class TrackerConnectionThread(threading.Thread):
         self.expectingNodeReply = False
         self.sendLock = threading.Lock()
         
+        
+    def trackerLoop(self):
         self.trackerSocket.settimeout(5)
         self.trackerSocket.connect(('localhost', self.trackerPort))
-        msg = self._makeTIM()
+        msg = self.thisNode._makeTIM()
         self.trackerSocket.send(msg)
         awaitTIYThread = threading.Thread(target=self.awaitTIY)
         awaitTIYThread.start()
-        
-    def trackerLoop(self):
         dcFlag = False
         while not self.shutdownFlag and not dcFlag:
             try:
@@ -313,7 +315,7 @@ class TrackerConnectionThread(threading.Thread):
                 pass
             else:
                 if response != "":
-                    nextMsg, responseData = self.handleReceivedTracker(inPacketData = response)
+                    self.thisNode.handleReceivedTracker(inPacketData = response)
                 else:
                     dcFlag = True
         self.trackerSocket.shutdown(socket.SHUT_RDWR)
@@ -327,7 +329,7 @@ class TrackerConnectionThread(threading.Thread):
     def awaitTIY(self):
         while not self.connectEvent.isSet():
             if not self.connectEvent.wait(3):
-                msg = self.thisNode._makeError(code = "notim")
+                msg = self.thisNode._makeError(errorCode = "notim")
                 self.send(msg)
         
 
