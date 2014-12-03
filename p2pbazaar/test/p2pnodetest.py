@@ -121,8 +121,6 @@ class ConnectNodeTest(P2PNodeTest):
         self.assertIn("port", msg)
         self.assertEquals(msg["port"], self.testNode.listenSocket.getsockname()[1])
         self.nodeEvent.set()
-        self.mockNode.shutdown()
-        del self.mockNode
         
     def runTest(self):
         self.assertTrue(self.nodeEvent.wait(5))
@@ -131,6 +129,8 @@ class ConnectNodeTest(P2PNodeTest):
         self.assertTrue(self.nodeEvent.wait(5))
         self.nodeEvent.clear()
         self.assertIn(2001, self.testNode.connectedNodeDict)
+        self.mockNode.shutdown()
+        del self.mockNode
         
         
 class DisconnectNodeTest(P2PNodeTest):
