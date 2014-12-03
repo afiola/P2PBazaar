@@ -20,17 +20,17 @@ class P2PNode:
     
     def startup(self):
         self.listenThread.start()
+        return self.listenThread.readyEvent.wait(10)
     
     
     def trackerConnect(self):
-        self.trackerConnected = False
         self.trackerThread.start()
-        self.trackerThread.connectEvent.wait(10)
-        return self.trackerConnected
+        return self.trackerThread.connectEvent.wait(10)
         
     def requestOtherNode(self):
         msg = self._makeNodeReq()
         self.trackerThread.send(msg)
+        self.trackerThread.expectingNodeReply = True
         return True
         
     def connectNode(self, otherID, otherNodePort):
@@ -49,19 +49,19 @@ class P2PNode:
         data = json.loads(inPacketData)
         if "type" in data:
             if data["type"] == "thisisyou":
-                self._handleTIY(id = data["id"], connectThread = self.trackerThread)
+                self._handleTIY(inData = data, connectThread = self.trackerThread)
                 return True
             elif data["type"] == "ping":
                 self._handlePing(connectThread = self.trackerThread)
                 return True
             elif data["type"] == "error":
-                self._handleError(errorCode = data["code"], connectThread = connectThread)
+                self._handleError(inData = data, connectThread = self.trackerThread)
                 return True
             elif data["type"] == "dc":
-                self._handleDC(connectThread = connectThread)
+                self._handleDC(connectThread = self.trackerThread)
                 return True
             elif data["type"] == "nodereply":
-                self._handleNodeReply(id = data["id"], port = data["port"])
+                self._handleNodeReply(inData = data)
                 return True
         return False
         
@@ -81,7 +81,7 @@ class P2PNode:
                 self._handleDC(connectThread = connectThread)
                 return True
             elif data["type"] == "search":
-                self._handleSearch(inData = data, connectThread = connectThread)
+                self._handleSearch(inData = data)
                 return True
         return False
         
@@ -158,6 +158,7 @@ class P2PNode:
                 connectionThread.expectingPing = False
                 connectionThread.dataLock.release()
                 return True
+            connectionThread.dataLock.release()
         return False
         
     def _handleTIY(self, inData, connectThread):
@@ -173,8 +174,10 @@ class P2PNode:
         if not connectionThread.expectingPing:
             msg = self._makePing()
             connectionThread.send(msg)
+            return True
         else:
             connectionThread.expectingPing = False
+            return False
             
     def _handleError(self, inData, connectThread):
         if "code" in inData:
@@ -189,15 +192,18 @@ class P2PNode:
     def _handleDC(self, connectThread):
         connectionThread.shutdownFlag = True
         
-    def _handleSearch(self, inData, connectThread):
+    def _handleSearch(self, inData):
         if "id" in inData and "returnPath" in inData:
             self.passOnSearchRequest(inData)
             return True
         return False
         
     def _handleNodeReply(self, inData):
-        if "id" in inData and "port" in inData:
+        if ("id" in inData 
+            and "port" in inData
+            and self.trackerThread.expectingNodeReply):
             self.connectNode(otherID = inData["id"], otherPort = inData["port"])
+            self.trackerThread.expectingNodeReply = False
             return True
         return False
         
@@ -288,6 +294,7 @@ class TrackerConnectionThread(threading.Thread):
         self.trackerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connectEvent = threading.Event()
         self.shutdownFlag = False
+        self.expectingNodeReply = False
         self.sendLock = threading.Lock()
         
         self.trackerSocket.settimeout(5)
