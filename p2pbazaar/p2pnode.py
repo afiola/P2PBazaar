@@ -109,6 +109,11 @@ class P2PNode:
     
     def shutdown(self):
         self.shutdownFlag = True
+        self.dataLock.acquire()
+        for thread in self.connectedNodeDict.values():
+            thread.shutdownFlag = True
+        self.trackerThread.shutdownFlag = True
+        self.listenThread.shutdownFlag = True
                 
     def _makeTIM(self):
         returnMsg = json.dumps({"type":"thisisme", "port":self.listenSocket.getsockname()[1], "id":self.idNum})
