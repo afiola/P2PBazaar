@@ -242,7 +242,7 @@ class PassOnSearchTest(P2PNodeTest):
         
         self.assertIn(76, self.testNode.searchRequestsSentList)
         self.assertIn(76, self.testNode.searchRequestsReceivedDict)
-        self.assertEquals(self.testNode.searchRequestsReceivedDict[76], [5, 7, 2001, self.testNode1.idNum])
+        self.assertEquals(self.testNode.searchRequestsReceivedDict[76], [5, 7, 2001, self.testNode.idNum])
         self.assertEquals(expectedMsg, recvData2[0])
         self.assertEquals(expectedMsg, recvData2[1])
         
