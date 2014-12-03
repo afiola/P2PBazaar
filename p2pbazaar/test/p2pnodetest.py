@@ -269,6 +269,10 @@ class PassOnSearchTest(P2PNodeTest):
 class ShutdownTest(P2PNodeTest):
     def runTest(self):
         self.testNode.shutdown()
+        time.sleep(6)
+        self.assertFalse(self.testNode.connectedNodeDict)
+        self.assertTrue(self.testNode.trackerThread.shutdownFlag)
+        self.assertTrue(self.testNode.listenThread.shutdownFlag)
         self.assertTrue(self.testNode.shutdownFlag)
         
 class MakeTIMTest(P2PNodeTest):
