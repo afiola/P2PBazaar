@@ -23,7 +23,11 @@ class P2PNodeTest(unittest.TestCase):
     def nodeFunc(self):
         self.mockNode = mocks.MockNode(id = 2001)
         self.nodeEvent.set()
-        self.mockNode.accept()
+        try:
+            self.mockNode.accept()
+        except socket.timeout:
+            #import pdb; pdb.set_trace()
+            pass
        
     def tearDown(self):
         self.testNode.shutdown()
@@ -43,8 +47,7 @@ class StartupTest(P2PNodeTest):
         
     def tearDown(self):
         P2PNodeTest.tearDown(self)
-        self.mockNode.nodeSocket.shutdown(socket.SHUT_RDWR)
-        self.mockNode.nodeSocket.close()
+        self.mockNode.shutdown()
         del self.mockNode
         
 class TrackerConnectTest(P2PNodeTest):
@@ -68,7 +71,11 @@ class TrackerConnectTest(P2PNodeTest):
         self.assertTrue(self.testNode.trackerConnect())
         self.assertTrue(self.waitEvent.wait(5))
         return
-        
+ 
+    def tearDown(self):
+        P2PNodeTest.tearDown(self)
+        self.mockTracker.shutdown()
+        del self.mockTracker
         
 class RequestNodeTest(P2PNodeTest):
     def setUp(self):
@@ -97,6 +104,11 @@ class RequestNodeTest(P2PNodeTest):
         self.assertTrue(self.trackerEvent.wait(5))
         return
         
+    def tearDown(self):
+        P2PNodeTest.tearDown(self)
+        self.mockTracker.shutdown()
+        del self.mockTracker
+        
 class ConnectNodeTest(P2PNodeTest):
     def setUp(self):
         P2PNodeTest.setUp(self)
@@ -112,6 +124,8 @@ class ConnectNodeTest(P2PNodeTest):
         self.assertIn("port", msg)
         self.assertEquals(msg["port"], self.testNode.listenSocket.getsockname()[1])
         self.nodeEvent.set()
+        self.mockNode.shutdown()
+        del self.mockNode
         
     def runTest(self):
         self.nodeEvent.wait(5)
@@ -120,6 +134,7 @@ class ConnectNodeTest(P2PNodeTest):
         self.nodeEvent.wait(5)
         self.nodeEvent.clear()
         self.assertIn(2001, self.testNode.connectedNodeDict)
+        
         
 class DisconnectNodeTest(P2PNodeTest):
     def setUp(self):
@@ -147,13 +162,13 @@ class DisconnectNodeTest(P2PNodeTest):
         self.testNode.disconnectNode(otherID = 2001)
         self.assertTrue(self.nodeEvent.wait(10))
         self.assertNotIn(2001, self.testNode.connectedNodeDict)
+        self.mockNode.shutdown()
+        del self.mockNode
         
-
 
 class HandleReceivedTrackerTest(P2PNodeTest):
     def setUp(self):
         P2PNodeTest.setUp(self)
-        self.nodeThread.start()
         self.mockTrackerThread = mocks.MockThread()
         self.testNode.trackerThread = self.mockTrackerThread
         
@@ -211,6 +226,7 @@ class HandleReceivedNodeTest(P2PNodeTest):
         
         return
         
+        
 class PassOnSearchTest(P2PNodeTest):
     def runTest(self):
         mockNodeList=[mocks.MockNode(id = (n + 2001)) for n in range(3)]
@@ -247,6 +263,9 @@ class PassOnSearchTest(P2PNodeTest):
         self.assertEquals(self.testNode.searchRequestsReceivedDict[76], [5, 7, 2001, self.testNode.idNum])
         self.assertEquals(expectedMsg, recvData2[0])
         self.assertEquals(expectedMsg, recvData2[1])
+        
+        for node in mockNodeList:
+            node.shutdown()
         
         return
         

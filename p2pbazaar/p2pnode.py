@@ -261,6 +261,9 @@ class NodeConnectionThread(threading.Thread):
                 recvData = self.nodeSocket.recv(4096)
             except socket.timeout:
                 continue
+            except socket.error:
+                self.dcFlag = True
+                continue
             else:
                 sentPing = False
                 if recvData != "":
@@ -270,14 +273,21 @@ class NodeConnectionThread(threading.Thread):
         self.thisNode.dataLock.acquire()
         del self.thisNode.connectedNodeDict[self.nodeID]
         self.thisNode.dataLock.release()
-        self.nodeSocket.shutdown(socket.SHUT_RDWR)
+        try:
+            self.nodeSocket.shutdown(socket.SHUT_RDWR)
+        except socket.error:
+            pass
         self.nodeSocket.close()
         return
         
     def send(self, packetData):
         self.sendLock.acquire()
-        self.nodeSocket.send(packetData)
-        self.sendLock.release()
+        try:
+            self.nodeSocket.send(packetData)
+        except socket.error:
+            self.dcFlag = True
+        finally:
+            self.sendLock.release()
         
     def awaitTIM(self):
         if not self.connectedEvent.wait(3):

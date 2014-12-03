@@ -38,6 +38,18 @@ class MockP2PObject:
     def sendError(self, code):
         msg = json.dumps({"type":"error", "code":code})
         self.sendToNode(msg)
+    
+    def shutdown(self):
+        try:
+            self.listenSocket.shutdown(socket.SHUT_RDWR)
+        except socket.error:
+            pass
+        self.listenSocket.close()
+        try:
+            self.nodeSocket.shutdown(socket.SHUT_RDWR)
+        except socket.error:
+            pass
+        self.nodeSocket.close()
 
 class MockTracker(MockP2PObject):
     def __init__(self):
