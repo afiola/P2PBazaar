@@ -14,6 +14,7 @@ class MockP2PObject:
         
     def accept(self):
         self.nodeSocket = self.listenSocket.accept()[0]
+        self.nodeSocket.settimeout(5)
         return self.nodeSocket
         
     def connect(self, port):
