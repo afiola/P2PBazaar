@@ -30,13 +30,15 @@ class P2PNode:
         
     def requestOtherNode(self):
         msg = self._makeNodeReq()
-        self.trackerThread.send(msg)        
+        self.trackerThread.send(msg)
+        return True
         
     def connectNode(self, otherID, otherNodePort):
         newSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         newSocket.connect(('localhost', otherNodePort))
         newSockThread = NodeConnectionThread(thisNode = self, nodeSocket = newSocket, otherID = otherID, originHere = True)
         newSockThread.start()
+        return newSockThread.connectEvent.wait(10)
     
     def disconnectNode(self, otherID):
         targetNodeThread = self.connectedNodeDict[otherID]
@@ -48,33 +50,46 @@ class P2PNode:
         if "type" in data:
             if data["type"] == "thisisyou":
                 self._handleTIY(id = data["id"], connectThread = self.trackerThread)
+                return True
             elif data["type"] == "ping":
                 self._handlePing(connectThread = self.trackerThread)
+                return True
             elif data["type"] == "error":
                 self._handleError(errorCode = data["code"], connectThread = connectThread)
+                return True
             elif data["type"] == "dc":
                 self._handleDC(connectThread = connectThread)
+                return True
             elif data["type"] == "nodereply":
                 self._handleNodeReply(id = data["id"], port = data["port"])
+                return True
+        return False
         
     def handleReceivedNode(self, inPacketData, connectThread):
         data = json.loads(inPacketData)
         if "type" in data:
             if data["type"] == "thisisme":
-                self._handleTIM(id = data["id"], port = data["port"], connectThread = connectThread)
+                self._handleTIM(inData = data, connectThread = connectThread)
+                return True
             elif data["type"] == "ping":
                 self._handlePing(connectThread = connectThread)
+                return True
             elif data["type"] == "error":
-                self._handleError(errorCode = data["code"], connectThread = connectThread)
+                self._handleError(inData = data, connectThread = connectThread)
+                return True
             elif data["type"] == "dc":
                 self._handleDC(connectThread = connectThread)
+                return True
             elif data["type"] == "search":
-                self._handleSearch(searchReq = data, connectThread = connectThread)
+                self._handleSearch(inData = data, connectThread = connectThread)
+                return True
+        return False
         
     def passOnSearchRequest(self, searchRequest):
         searchID = searchRequest["id"]
         pathNodeIDs = searchRequest["returnPath"]
         msg = self._makeSearchReq(searchRequest)
+        sentIDs = []
         self.dataLock.acquire()
         if searchID not in self.searchRequestsReceivedDict:
             self.searchRequestsReceivedDict[searchID] = []
@@ -85,9 +100,10 @@ class P2PNode:
             for nodeID in self.connectedNodeDict.keys():
                 if nodeID not in self.searchRequestsReceivedDict[searchID]:
                     self.connectedNodeDict[nodeID].send(msg)
+                    sentIDs.append(nodeID)
         self.searchRequestsSentList.append(searchID)
         self.dataLock.release()
-        return
+        return sentIDs
         
     
     def shutdown(self):
@@ -126,24 +142,32 @@ class P2PNode:
         returnMsg = json.dumps(msgDict)
         return returnMsg
         
-    def _handleTIM(self, id, port, connectThread):
-        self.dataLock.acquire()
-        connectionThread.dataLock.acquire()
-        if connectionThread.nodeID in self.connectedNodeDict:
-            del self.connectedNodeDict[connectionThread.nodeID]
-        self.connectedNodeDict[id] = connectionThread
-        self.dataLock.release()
-        connectionThread.nodeID = id
-        if not connectionThread.connectedEvent.isSet():
-            connectionThread.connectedEvent.set()
-        connectionThread.expectingPing = False
-        connectionThread.dataLock.release()
+    def _handleTIM(self, inData, connectThread):
+        if "id" in inData:
+            newID = inData["id"]
+            connectionThread.dataLock.acquire()
+            if connectionThread.nodeID != newID:
+                self.dataLock.acquire()
+                if connectionThread.nodeID in self.connectedNodeDict:
+                    del self.connectedNodeDict[connectionThread.nodeID]
+                self.connectedNodeDict[newID] = connectionThread
+                self.dataLock.release()
+                connectionThread.nodeID = newID
+                if not connectionThread.connectedEvent.isSet():
+                    connectionThread.connectedEvent.set()
+                connectionThread.expectingPing = False
+                connectionThread.dataLock.release()
+                return True
+        return False
         
-    def _handleTIY(self, id, connectThread):
-        if connectThread is self.trackerThread:
-            if id > 0:
-                self.idNum = id
+    def _handleTIY(self, inData, connectThread):
+        if "id" in inData and connectThread is self.trackerThread:
+            newID = inData["id"]
+            if newID > 0:
+                self.idNum = newID
                 connectThread.connectEvent.set()
+                return True
+        return False
         
     def _handlePing(self, connectThread):
         if not connectionThread.expectingPing:
@@ -152,19 +176,30 @@ class P2PNode:
         else:
             connectionThread.expectingPing = False
             
-    def _handleError(self, errorCode, connectThread):
-        if errorCode == "notim":
-            msg = self._makeTIM()
-            connectionThread.send(msg)
+    def _handleError(self, inData, connectThread):
+        if "code" in inData:
+            errorCode = data["code"]
+            if errorCode == "notim":
+                msg = self._makeTIM()
+                connectionThread.send(msg)
+                return ("notim", None)
+            return ("Unrecognized message", None)
+        return ("Bad message", None)
             
     def _handleDC(self, connectThread):
         connectionThread.shutdownFlag = True
         
-    def _handleSearch(self, searchRequest, connectThread):
-        self.passOnSearchRequest(searchRequest)
+    def _handleSearch(self, inData, connectThread):
+        if "id" in inData and "returnPath" in inData:
+            self.passOnSearchRequest(inData)
+            return True
+        return False
         
-    def _handleNodeReply(self, id, port):
-        self.connectNode(otherID = id, otherPort = port)
+    def _handleNodeReply(self, inData):
+        if "id" in inData and "port" in inData:
+            self.connectNode(otherID = inData["id"], otherPort = inData["port"])
+            return True
+        return False
         
         
 class ListenThread(threading.Thread):
@@ -291,7 +326,7 @@ class TrackerConnectionThread(threading.Thread):
 
 class NodeConnectionEvent():
     def __init__(self):
-        _event = threading.Event()
+        self._event = threading.Event()
         
     def isSet(self):
         return self._event.isSet()
@@ -302,8 +337,8 @@ class NodeConnectionEvent():
     def clear(self):
         return self._event.clear()
         
-    def wait(self, timeout = -1):
-        if timeout < 0:
+    def wait(self, timeout = None):
+        if timeout <= 0 or timeout == None:
             return self._event.wait()
         else:
             return self._event.wait(timeout)

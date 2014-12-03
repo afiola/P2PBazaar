@@ -155,7 +155,7 @@ item: desired item
 
 id: Randomly generated integer. 
 
-####SearchReply: Sent from a seller, directly or along a path.
+####SearchReply: Sent from a seller, directly.
 
 type: “reply”
 
@@ -163,11 +163,11 @@ path: Reverse of returnPath in corresponding search
 
 item: Item desired by corresponding search.
 
-id: ID number of seller.
+searchID:ID number of originating search request.
 
 ####Buy: 
 
-Sent from a buyer, directly or along a path.
+Sent from a buyer, directly.
 
 type: “buy”
 

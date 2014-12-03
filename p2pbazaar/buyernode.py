@@ -2,12 +2,14 @@ from p2pbazaar.p2pnode import P2PNode
 import threading
 import json
 import random
+import time
+import collections
 from p2pbazaar import trackerPort
 
 class BuyerNode(P2PNode):
     def __init__(self, *args):
         P2PNode.__init__(self)
-        self.buyReadyEvent = threading.Event()
+        self.buyReady = BuyReadyEvent()
         self.buyCompleteEvent = threading.Event()
         self.searchReplyEvent = threading.Event()
         self.shoppingList = []
@@ -16,17 +18,28 @@ class BuyerNode(P2PNode):
         self.shoppingBag = []
         self.buyTargetDict = {}
         self.pendingBuyDict = {}
+        self.activeSearchDict = {}
         random.seed()
+        self.buyReadyThread = threading.Thread(target=self._buyReadyLoop)
+        
+    def startup(self):
+        P2PNode.startup(self)
+        self.buyReadyThread.start()
         
     def searchItem(self, targetItem):
         searchID = random.randint(1, 1000000)
         msg = self._makeSearch(item = targetItem, searchID = searchID)
+        newSearchThread = AwaitSearchReplyThread(thisNode = self, searchID = searchID)
         self.dataLock.acquire()
         self.searchRequestsSentList.append(searchID)
         self.searchRequestsReceivedDict[searchID] = []
+        sentNodes = []
         for node in self.connectedNodeDict.values():
             node.send(msg)
-        return
+            sentNodes.append(node.nodeID)
+        self.dataLock.release()
+        newSearchThread.start()
+        return sentNodes
         
     def buyItem(self, sellerID, targetItem):
         if sellerID in self.connectedNodeDict:
@@ -39,49 +52,21 @@ class BuyerNode(P2PNode):
             self.dataLock.acquire()
             self.pendingBuyDict[buyID] = targetItem
             self.dataLock.release()
-        return
+            return True
+        return False
         
-    def handleReceivedNode(self, inPacketData, inExpectingPing = False, inExpectingTIM = False):
+    def handleReceivedNode(self, inPacketData, connectThread):
         data = json.loads(inPacketData)
-        retMsg = None
-        retData = None
         if "type" in data:
             if data["type"] == "buyOK":
-                boughtID = data["id"]
-                self.dataLock.acquire()
-                if boughtID in self.pendingBuyDict:
-                    boughtItem = self.pendingBuyDict[boughtID]
-                    self.shoppingBag.append(boughtItem)
-                    if boughtItem in self.shoppingList:
-                        self.shoppingList.remove(boughtItem)
-                    self.buyCompleteEvent.set()
-                    retData = {"isBoughtItem":True, "id":boughtID, "item":boughtItem}
-                self.dataLock.release()
+                self._handleBuyOK(data)
             elif data["type"] == "reply":
-                pass
+                self._handleSearchReply(inData = data["id"], 
+                                        connectThread = connectThread)
             else:
-                return P2PNode.handleReceivedNode(self, inPacketData, inExpectingPing, inExpectingTIM)
-        return (retMsg, retData)
-            
-        
-    def handleSearchReply(self, searchReply):
-        if "item" in searchReply and "id" in searchReply:
-            targetItem = searchReply["item"]
-            targetID = searchReply["id"]
-            targetNode = None
-            self.dataLock.acquire()
-            if targetID not in self.connectedNodeDict:
-                self.dataLock.release()
-                targetPort = self.requestOtherNode(inID = targetID)[1]
-                self.connectNode(targetID, targetPort)
-                self.dataLock.acquire()
-            targetNode = self.connectedNodeDict[targetID]
-            self.buyTargetDict[targetItem] = targetNode
-            self.dataLock.release()
-            self.buyCompleteEvent.clear()
-            self.buyReadyEvent.set()
-        return
-            
+                return P2PNode.handleReceivedNode(self, inPacketData)
+            return True
+        return False
 
     def _makeBuy(self, item, buyID):
         msg = json.dumps({"type":"buy", "id":buyID, "item":item})
@@ -92,3 +77,129 @@ class BuyerNode(P2PNode):
             searchID = random.randint(1, 1000000)
         msg = json.dumps({"type":"search", "returnPath":[self.idNum], "item":item, "id":searchID})
         return msg
+        
+    def _buyReadyLoop(self):
+        while not self.shutdownFlag:
+            buyEventResult = self.buyReady.wait(5)
+            if buyEventResult:
+                targetItem, targetSeller = buyEventResult
+                self.buyItem(targetSeller, targetItem)
+                
+    def _handleBuyOK(self, id):
+        self.dataLock.acquire()
+        if id in self.pendingBuyDict:
+            boughtItem = self.pendingBuyDict[id]
+            self.shoppingBag.append(boughtItem)
+            self.shoppingBag.remove(boughtItem)
+            self.dataLock.release()
+            return True
+        else:
+            self.dataLock.release()
+            return False
+        
+    def _handleSearchReply(self, searchID, item, connectThread):
+        self.dataLock.acquire()
+        if (item in self.shoppingList 
+            and searchID in self.activeSearchDict):
+            del self.activeSearchDict[searchID]
+            self.buyItem(connectThread.nodeID, item)
+            self.dataLock.release()
+            return True
+        else:
+            self.dataLock.release()
+            return False
+    
+    def _handleError(self, inData, connectThread):
+        if "code" in inData:
+            if inData["code"] == "gotnothing":
+                self.dataLock.acquire()
+                stoppedThreadIDs = []
+                for id, thread in self.activeSearchDict.items():
+                    if thread.hasFailed:
+                        thread.stopFlag = True
+                        del self.activeSearchDict[id]
+                        stoppedThreadIDs.append(id)
+                self.dataLock.release()
+                return ("gotnothing", stoppedThreadIDs)
+            else:
+                return P2PNode._handleError(inData, connectThread)
+        else:
+            return ("Bad message", None)
+        
+        
+class BuyReadyEvent():
+    def __init__(self, item, sellerID):
+        self._event = threading.Event()
+        self._queue = collections.deque()
+        
+    def isSet(self):
+        return self._event.isSet()
+    
+    def set(self, item, sellerID):
+        self._queue.append((item, sellerID))
+        return self._event.set()
+    
+    def clear(self):
+        return self._event.clear()
+        
+    def wait(self, timeout = None):
+        if self._queue and self._event.wait(timeout):
+            retVal = self._queue.popleft()
+            return retVal
+        else:
+            return False
+        
+class SearchReplyEvent():
+    def __init__(self):
+        self._event = threading.Event()
+        self._queue = collections.deque()
+        
+    def isSet(self):
+        return (self._queue and self._event.isSet())
+    
+    def set(self, searchID):
+        self._queue.append(searchID)
+        return self._event.set()
+    
+    def clear(self):
+        if not self._queue:
+            return self._event.clear()
+        
+    def wait(self, timeout = None):
+        if self._queue and self._event.wait(timeout):
+            retVal = self._queue.popleft()
+            return retVal
+        else:
+            return None
+            
+            
+        
+class AwaitSearchReplyThread(threading.Thread):
+    def __init__(self, thisNode, searchID, timeout=30):
+        threading.Thread.__init__(target=self.waitLoop)
+        self.thisNode = thisNode
+        self.searchID = searchID
+        self.hasFailed = False
+        self.stopFlag = False
+        self.timeout = timeout
+        
+    def waitLoop(self):
+        startTime = time.time()
+        replyEvent = self.thisNode.searchReplyEvent
+        while not self.stopFlag:
+            timeLeft = self.timeout - (time.time()-startTime)
+            replyID = replyEvent.wait(timeLeft)
+            if replyID == None
+                self.hasFailed = True
+                self.thisNode.requestOtherNode()
+            elif replyID != self.searchID:
+                replyEvent.set(replyID)
+            else:
+                self.stopFlag = True
+        return 
+        
+                
+                
+                    
+            
+            
