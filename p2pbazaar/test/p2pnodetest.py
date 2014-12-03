@@ -69,7 +69,7 @@ class TrackerConnectTest(P2PNodeTest):
         self.trackerEvent.wait(5)
         self.trackerEvent.clear()
         self.assertTrue(self.testNode.trackerConnect())
-        self.assertTrue(self.waitEvent.wait(5))
+        self.assertTrue(self.trackerEvent.wait(5))
         return
  
     def tearDown(self):
