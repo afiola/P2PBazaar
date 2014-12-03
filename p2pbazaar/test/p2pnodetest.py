@@ -111,7 +111,7 @@ class ConnectNodeTest(P2PNodeTest):
         self.assertEquals(msg["id"], self.testNode.idNum)
         self.assertIn("port", msg)
         self.assertEquals(msg["port"], self.testNode.listenSocket.getsockname()[1])
-        self.waitEvent.set()
+        self.nodeEvent.set()
         
     def runTest(self):
         self.nodeEvent.wait(5)
@@ -129,11 +129,11 @@ class DisconnectNodeTest(P2PNodeTest):
     def nodeFunc(self):
         P2PNodeTest.nodeFunc(self)
         msg = self.mockNode.receiveDict()
-        self.waitEvent.set()
+        self.nodeEvent.set()
         msg = self.mockNode.receiveDict()
         self.assertIn("type", msg)
         self.assertEquals(msg["type"], "dc")
-        self.waitEvent.set()
+        self.nodeEvent.set()
         
     def runTest(self):
         self.nodeEvent.wait(5)
@@ -214,6 +214,7 @@ class PassOnSearchTest(P2PNodeTest):
         mockNodeList=[mocks.MockNode(id = (n + 2001)) for n in range(3)]
         for node in mockNodeList:
             self.testNode.connectNode(node.idNum, node.listenPort)
+            node.accept()
         recvData = [mockNodeList[n].receiveDict() for n in range(3)]
         
         searchReq1 = {"type":"search", "returnPath":[5, 7, 9], "item":"socks", "id":84}
