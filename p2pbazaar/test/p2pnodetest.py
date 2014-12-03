@@ -236,7 +236,7 @@ class PassOnSearchTest(P2PNodeTest):
         
         self.testNode.passOnSearchRequest(searchReq2)
         
-        self.assertRaises(socket.timeout, mockNodeList[0].receiveDict())
+        self.assertRaises(socket.timeout, mockNodeList[0].receiveDict)
         recvData2 = [mockNodeList[n].receiveDict() for n in range(1,3)]
         
         
