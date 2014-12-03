@@ -299,7 +299,7 @@ class MakeDCTest(P2PNodeTest):
         
 class MakeNodeReqTest(P2PNodeTest):
     def runTest(self):
-        self.testNode.connectedNodeDict[2] = " "
+        self.testNode.connectedNodeDict[2] = mocks.MockThread()
         expectedMSG = json.dumps({"type":"nodereq", "idList":[self.testNode.idNum, 2]})
         self.assertEquals(self.testNode._makeNodeReq(), expectedMSG)
         
