@@ -19,6 +19,7 @@ class BuyerNode(P2PNode):
         self.buyTargetDict = {}
         self.pendingBuyDict = {}
         self.activeSearchDict = {}
+        self.searchReplyThreadList=[]
         random.seed()
         self.buyReadyThread = threading.Thread(target=self._buyReadyLoop)
         
@@ -31,6 +32,7 @@ class BuyerNode(P2PNode):
         msg = self._makeSearch(item = targetItem, searchID = searchID)
         newSearchThread = AwaitSearchReplyThread(thisNode = self, searchID = searchID)
         self.dataLock.acquire()
+        self.searchReplyThreadList.append(newSearchThread)
         self.searchRequestsSentList.append(searchID)
         self.searchRequestsReceivedDict[searchID] = []
         sentNodes = []
@@ -40,6 +42,11 @@ class BuyerNode(P2PNode):
         self.dataLock.release()
         newSearchThread.start()
         return sentNodes
+        
+    def shutdown(self):
+        P2PNode.shutdown(self)
+        for thread in self.searchReplyThreadList:
+            thread.shutdownFlag = True
         
     def buyItem(self, sellerID, targetItem):
         if sellerID in self.connectedNodeDict:

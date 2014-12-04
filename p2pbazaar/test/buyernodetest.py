@@ -3,46 +3,28 @@ import threading
 import unittest
 import json
 from p2pbazaar.buyernode import BuyerNode
+from p2pbazaar.test import mocks
 from p2pbazaar import trackerPort
+
 
 class BuyerNodeTest(unittest.TestCase):
     def setUp(self):
         self.testNode = BuyerNode()
-        self.mockNode1Listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.mockNode2Listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.mockNode3Listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.mockNode1Listen.bind(('localhost',0))
-        self.mockNode2Listen.bind(('localhost',0))
-        self.mockNode3Listen.bind(('localhost',0))
-        self.mockNode1Listen.settimeout(5)
-        self.mockNode2Listen.settimeout(5)
-        self.mockNode3Listen.settimeout(5)
-        self.mockNode1Listen.listen(5)
-        self.mockNode2Listen.listen(5)
-        self.mockNode3Listen.listen(5)
-        
         
     def tearDown(self):
         self.testNode.shutdown()
-        del self.testNode
-        try:
-            self.mockNode1Listen.shutdown(socket.SHUT_RDWR)
-            self.mockNode1Listen.close()
-        except socket.error:
-            pass
-        try:
-            self.mockNode2Listen.shutdown(socket.SHUT_RDWR)
-            self.mockNode2Listen.close()
-        except socket.error:
-            pass
-        try:
-            self.mockNode3Listen.shutdown(socket.SHUT_RDWR)
-            self.mockNode3Listen.close()
-        except socket.error:
-            pass
         
 class SearchItemTestCase(BuyerNodeTest):
     def runTest(self):
+        mockThreadList = []
+        for n in range(3):
+            mockThreadList.append(mocks.MockThread())
+            mockThreadList[n].nodeID = n+2001
+            self.testNode.connectedNodeDict[n+2001] = mockThreadList[n]
+        self.assertEquals(self.testNode.searchItem("socks"),[2001,2002,2003])
+            
+    
+        
         testSock1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         testSock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         testSock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
