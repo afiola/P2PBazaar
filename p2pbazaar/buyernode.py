@@ -46,7 +46,7 @@ class BuyerNode(P2PNode):
     def shutdown(self):
         P2PNode.shutdown(self)
         for thread in self.searchReplyThreadList:
-            thread.shutdownFlag = True
+            thread.stopFlag = True
         
     def buyItem(self, sellerID, targetItem):
         if sellerID in self.connectedNodeDict:
@@ -68,7 +68,7 @@ class BuyerNode(P2PNode):
             if data["type"] == "buyOK":
                 self._handleBuyOK(data)
             elif data["type"] == "reply":
-                self._handleSearchReply(inData = data["id"], 
+                self._handleSearchReply(inData = data, 
                                         connectThread = connectThread)
             else:
                 return P2PNode.handleReceivedNode(self, inPacketData, connectThread)
@@ -92,29 +92,33 @@ class BuyerNode(P2PNode):
                 targetItem, targetSeller = buyEventResult
                 self.buyItem(targetSeller, targetItem)
                 
-    def _handleBuyOK(self, id):
+    def _handleBuyOK(self, data):
         self.dataLock.acquire()
-        if id in self.pendingBuyDict:
-            boughtItem = self.pendingBuyDict[id]
-            self.shoppingBag.append(boughtItem)
-            self.shoppingBag.remove(boughtItem)
-            self.dataLock.release()
-            return True
-        else:
-            self.dataLock.release()
-            return False
+        id = None
+        if "id" in data:
+            id = data["id"]
+            if id in self.pendingBuyDict:
+                boughtItem = self.pendingBuyDict[id]
+                self.shoppingBag.append(boughtItem)
+                self.shoppingBag.remove(boughtItem)
+                self.dataLock.release()
+                return True
+        self.dataLock.release()
+        return False
         
-    def _handleSearchReply(self, searchID, item, connectThread):
-        self.dataLock.acquire()
-        if (item in self.shoppingList 
-            and searchID in self.activeSearchDict):
-            del self.activeSearchDict[searchID]
-            self.buyItem(connectThread.nodeID, item)
+    def _handleSearchReply(self, data, connectThread):
+        if "item" in data and "searchID" in data:
+            item = data["item"]
+            searchID = data["searchID"]
+            self.dataLock.acquire()
+            if (item in self.shoppingList 
+                and searchID in self.activeSearchDict):
+                del self.activeSearchDict[searchID]
+                self.dataLock.release()
+                self.buyItem(connectThread.nodeID, item)
+                return True
             self.dataLock.release()
-            return True
-        else:
-            self.dataLock.release()
-            return False
+        return False
     
     def _handleError(self, inData, connectThread):
         if "code" in inData:

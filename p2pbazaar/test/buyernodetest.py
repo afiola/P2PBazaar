@@ -16,6 +16,8 @@ class BuyerNodeTest(unittest.TestCase):
         
 class SearchItemTestCase(BuyerNodeTest):
     def runTest(self):
+        mockTracker = mocks.MockThread()
+        self.testNode.trackerThread = mockTracker
         mockThreadList = []
         for n in range(3):
             mockThreadList.append(mocks.MockThread())
