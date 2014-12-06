@@ -71,7 +71,7 @@ class BuyerNode(P2PNode):
                 self._handleSearchReply(inData = data["id"], 
                                         connectThread = connectThread)
             else:
-                return P2PNode.handleReceivedNode(self, inPacketData)
+                return P2PNode.handleReceivedNode(self, inPacketData, connectThread)
             return True
         return False
 
@@ -196,7 +196,7 @@ class AwaitSearchReplyThread(threading.Thread):
         while not self.stopFlag:
             timeLeft = self.timeout - (time.time()-startTime)
             replyID = replyEvent.wait(timeLeft)
-            if replyID == None
+            if replyID == None:
                 self.hasFailed = True
                 self.thisNode.requestOtherNode()
             elif replyID != self.searchID:

@@ -21,35 +21,13 @@ class SearchItemTestCase(BuyerNodeTest):
             mockThreadList.append(mocks.MockThread())
             mockThreadList[n].nodeID = n+2001
             self.testNode.connectedNodeDict[n+2001] = mockThreadList[n]
-        self.assertEquals(self.testNode.searchItem("socks"),[2001,2002,2003])
-            
-    
-        
-        testSock1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        testSock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        testSock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        testSock1.settimeout(5)
-        testSock2.settimeout(5)
-        testSock3.settimeout(5)
-        testSock1.connect(self.mockNode1Listen.getsockname())
-        mockNode1, mockNode1Addr = self.mockNode1Listen.accept()
-        mockNode1.settimeout(5)
-        testSock2.connect(self.mockNode2Listen.getsockname())
-        mockNode2, mockNode2Addr = self.mockNode2Listen.accept()
-        mockNode2.settimeout(5)
-        testSock3.connect(self.mockNode3Listen.getsockname())
-        mockNode3, mockNode3Addr = self.mockNode3Listen.accept()
-        mockNode3.settimeout(5)
-        
-        self.testNode.connectedNodeDict[1] = testSock1
-        self.testNode.connectedNodeDict[2] = testSock2
-        self.testNode.connectedNodeDict[3] = testSock3
-        
+        self.assertEquals(self.testNode.searchItem("socks"),[2001,2002,2003])    
+                
         self.testNode.searchItem("socks")
         
-        data = [json.loads(mockNode1.recv(4096)), json.loads(mockNode2.recv(4096)), json.loads(mockNode3.recv(4096))]
+        data = [json.loads(thread.sentMsg) for thread in mockThreadList]
         
-        expectedDict = {"type":"search", "returnPath":[self.testNode.idNum], "item":"socks", "id":1}
+        expectedDict = {"type":"search", "returnPath":[self.testNode.idNum], "item":"socks"}
         
         for item in data:
             self.assertIn("type", item)
@@ -63,17 +41,13 @@ class SearchItemTestCase(BuyerNodeTest):
         
 class BuyItemTestCase(BuyerNodeTest):
     def runTest(self):
-        testSock1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        testSock1.settimeout(5)
-        testSock1.connect(self.mockNode1Listen.getsockname())
-        mockNode1, mockNode1Addr = self.mockNode1Listen.accept()
-        mockNode1.settimeout(5)
+        mockThread = mocks.MockThread()
         
-        self.testNode.connectedNodeDict[1] = testSock1
+        self.testNode.connectedNodeDict[mockThread.nodeID] = mockThread
         
-        self.testNode.buyItem(sellerID = 1, targetItem = "socks")
+        self.testNode.buyItem(sellerID = mockThread.nodeID, targetItem = "socks")
         
-        recvData = json.loads(mockNode1.recv(4096))
+        recvData = json.loads(mockThread.sentMsg)
         
         self.assertIn("type", recvData)
         self.assertEquals(recvData["type"], "buy")
@@ -81,93 +55,37 @@ class BuyItemTestCase(BuyerNodeTest):
         self.assertEquals(recvData["item"], "socks")
         self.assertIn("id", recvData)
         
-        buyID = recvData["id"]
+        '''buyID = recvData["id"]
         
         message = json.dumps({"type":"buyOK", "item":"socks", "id":buyID})
         mockNode1.send(message)
         self.testNode.handleReceivedNode(inPacketData = testSock1.recv(4096))
         self.assertTrue(self.testNode.buyCompleteEvent.wait(5))
-        self.assertIn("socks", self.testNode.shoppingBag)
+        self.assertIn("socks", self.testNode.shoppingBag)'''
     
 class HandleReceivedNodeTestCase(BuyerNodeTest):
     def runTest(self):
-        self.testNode.startup()
-        self.testNode.listenReadyEvent.wait()
-        #Test expected ping
+        mockThread = mocks.MockThread()
+        
+        
+        #Test BuyOK
+        msg = json.dumps({"type":"buyOK"})
+        self.assertTrue(self.testNode.handleReceivedNode(msg, mockThread))
+        
+        #Test SearchReply
+        msg = json.dumps({"type":"reply"})
+        self.assertTrue(self.testNode.handleReceivedNode(msg, mockThread))
+        
+        #Test ping (make sure inherited is working)
         msg = json.dumps({"type":"ping"})
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingPing = True), (None, True))
+        self.assertTrue(self.testNode.handleReceivedNode(msg, mockThread))
         
-        #Test unexpected ping
-        msg = json.dumps({"type":"ping"})
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingPing = False), (msg, None))
+        #Test unrecognized message
+        msg = json.dumps({"type":"lolwat"})
+        self.assertFalse(self.testNode.handleReceivedNode(msg, mockThred))
         
-        #Test expected ThisIsMe
-        msg = json.dumps({"type":"thisisme", "id":50})
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg, inExpectingTIM = True), (None, {"nodeID":50}))
         
-        #Test NOTIM error
-        msg = json.dumps({"type":"error", "code":"notim"})
-        expectedmsg = json.dumps({"type":"thisisme", "port":self.testNode.listenPort, "id":self.testNode.idNum})
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (expectedmsg, None))
-        
-        #Test disconnect
-        msg = json.dumps({"type":"dc"})
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, {"dcFlag":True}))
-        
-        #Test search
-        expectedDict = {"type":"search","returnPath":[5, 7, 9], "item":"socks", "id":84}
-        msg = json.dumps(expectedDict)
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, {"isSearchRequest":True, "origSearchReq":expectedDict}))
-        
-        #Test search reply
-        msg = json.dumps({"type":"reply", "item":"socks", "searchID":5, "sellerID":6})
-        expectedDict = {"isSearchReply":True, "item":"socks", "searchID":5, "sellerID":6}
-        self.assertTrue(self.testNode.searchReplyEvent.wait(5))
-        self.assertEquals(self.testNode.handleReceivedNode(inPacketData = msg), (None, expectedDict))
         return
-        
-class HandleSearchReplyTestCase(BuyerNodeTest):
-    def awaitMessageThread(self, mockTracker, readyEvent):
-        self.req = json.loads(mockTracker.recv(4096))
-        readyEvent.set()
-        msg = json.dumps({"type":"nodereply", "id":2, "port":self.mockNode2Listen.getsockname()[1]})
-        mockTracker.send(msg)
-        
-    def runTest(self):
-        self.testNode.startup()
-        readyEvent = threading.Event()
-        self.req = {}
-        self.testNode.trackerSocket.connect(self.mockNode1Listen.getsockname())
-        mockTracker, mockTrackerAddr = self.mockNode1Listen.accept()
-        mockTracker.settimeout(5)
-        self.testNode.shoppingList.append("socks")
-        testDict = {"isSearchReply":True, "item":"socks", "id":2}
-        otherThread = threading.Thread(target=self.awaitMessageThread, args=(mockTracker, readyEvent))
-        otherThread.start()
-        self.testNode.handleSearchReply(testDict)
-        
-        readyEvent.wait()
-        self.assertIn("type", self.req)
-        self.assertEquals(self.req["type"], "nodereq")
-        self.assertIn("id", self.req)
-        self.assertEquals(self.req["id"], 2)
-       
-        mockNode2, mockAddr2 = self.mockNode2Listen.accept()
-        mockNode2.settimeout(5)
-        
-        connectMSG = json.loads(mockNode2.recv(4096))
-        
-        self.assertIn("type", connectMSG)
-        self.assertEquals(connectMSG["type"], "thisisme")
-        self.assertIn("id", connectMSG)
-        self.assertEquals(connectMSG["id"], self.testNode.idNum)
-        
-        self.assertTrue(self.testNode.buyReadyEvent.wait(5))
-        
-        self.assertIn("socks", self.testNode.buyTargetDict)
-        self.assertIs(self.testNode.buyTargetDict["socks"], self.testNode.connectedNodeDict[2])
-        return
-        
 if __name__ == "__main__":
     unittest.main()
         
