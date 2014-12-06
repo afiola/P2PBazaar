@@ -68,8 +68,7 @@ class BuyerNode(P2PNode):
             if data["type"] == "buyOK":
                 self._handleBuyOK(data)
             elif data["type"] == "reply":
-                self._handleSearchReply(inData = data, 
-                                        connectThread = connectThread)
+                self._handleSearchReply(data, connectThread)
             else:
                 return P2PNode.handleReceivedNode(self, inPacketData, connectThread)
             return True

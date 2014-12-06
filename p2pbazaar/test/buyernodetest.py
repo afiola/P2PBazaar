@@ -84,7 +84,7 @@ class HandleReceivedNodeTestCase(BuyerNodeTest):
         
         #Test unrecognized message
         msg = json.dumps({"type":"lolwat"})
-        self.assertFalse(self.testNode.handleReceivedNode(msg, mockThred))
+        self.assertFalse(self.testNode.handleReceivedNode(msg, mockThread))
         
         
         return
