@@ -11,7 +11,7 @@ class BuyerNode(P2PNode):
         P2PNode.__init__(self)
         self.buyReady = BuyReadyEvent()
         self.buyCompleteEvent = threading.Event()
-        self.searchReplyEvent = threading.Event()
+        self.searchReplyEvent = SearchReplyEvent()
         self.shoppingList = []
         for arg in args:
             self.shoppingList.append(str(arg))
