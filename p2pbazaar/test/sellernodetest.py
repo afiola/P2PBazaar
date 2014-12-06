@@ -46,7 +46,7 @@ class ReplyTest(SellerNodeTest):
         self.assertTrue(self.testNode.reply(mockThread.nodeID, 1))
         time.sleep(2)
         expectedDict = {"type":"reply", "searchID":1}
-        self.assertEquals(json.loads(mockThread.sendMsg), expectedDict)
+        self.assertEquals(json.loads(mockThread.sentMsg), expectedDict)
         
         
 if __name__ == "__main__":

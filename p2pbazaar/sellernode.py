@@ -39,12 +39,23 @@ class SellerNode(P2PNode):
                 
         
     def reply(self, buyerID, searchID):
-        pass
+        msg = self._makeReply(searchID)
+        self.dataLock.acquire()
+        if buyerID in self.connectedNodeDict:
+            self.connectedNodeDict[buyerID].send(msg)
+            self.dataLock.release()
+            return True
+        self.dataLock.release()
+        return False
         
     def _handleBuyRequest(self, data, connectThread):
         pass
         
     def _handleSearch(self, data):
         pass
+        
+    def _makeReply(self, searchID):
+        returnMsg = json.dumps({"type":"reply", "searchID":searchID})
+        return returnMsg
         
     
