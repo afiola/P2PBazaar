@@ -185,8 +185,8 @@ class SearchReplyEvent():
             
         
 class AwaitSearchReplyThread(threading.Thread):
-    def __init__(self, thisNode, searchID, timeout=30):
-        threading.Thread.__init__(target=self.waitLoop)
+    def __init__(self, thisNode, searchID, timeout=10):
+        threading.Thread.__init__(self, target=self.waitLoop)
         self.thisNode = thisNode
         self.searchID = searchID
         self.hasFailed = False
