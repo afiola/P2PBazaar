@@ -135,7 +135,7 @@ class BuyerNode(P2PNode):
         
         
 class BuyReadyEvent():
-    def __init__(self, item, sellerID):
+    def __init__(self):
         self._event = threading.Event()
         self._queue = collections.deque()
         
