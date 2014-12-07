@@ -10,16 +10,14 @@ class BuyerNode(P2PNode):
     def __init__(self, *args):
         P2PNode.__init__(self)
         self.buyReady = BuyReadyEvent()
-        self.buyCompleteEvent = threading.Event()
+        self.buyCompleteEvents = []
         self.searchReplyEvent = SearchReplyEvent()
         self.shoppingList = []
         for arg in args:
             self.shoppingList.append(str(arg))
         self.shoppingBag = []
-        self.buyTargetDict = {}
         self.pendingBuyDict = {}
         self.activeSearchDict = {}
-        self.searchReplyThreadList=[]
         random.seed()
         self.buyReadyThread = threading.Thread(target=self._buyReadyLoop)
         
@@ -30,9 +28,10 @@ class BuyerNode(P2PNode):
     def searchItem(self, targetItem):
         searchID = random.randint(1, 1000000)
         msg = self._makeSearch(item = targetItem, searchID = searchID)
-        newSearchThread = AwaitSearchReplyThread(thisNode = self, searchID = searchID)
+        newSearchThread = AwaitSearchReplyThread(thisNode = self, item = targetItem, searchID = searchID)
         self.dataLock.acquire()
-        self.searchReplyThreadList.append(newSearchThread)
+        self.buyCompleteEvents.append(BuyCompleteEvent(targetItem))
+        self.activeSearchDict[searchID] = newSearchThread
         self.searchRequestsSentList.append(searchID)
         self.searchRequestsReceivedDict[searchID] = []
         sentNodes = []
@@ -45,7 +44,7 @@ class BuyerNode(P2PNode):
         
     def shutdown(self):
         P2PNode.shutdown(self)
-        for thread in self.searchReplyThreadList:
+        for thread in self.activeSearchDict.values():
             thread.stopFlag = True
         
     def buyItem(self, sellerID, targetItem):
@@ -86,7 +85,7 @@ class BuyerNode(P2PNode):
         
     def _buyReadyLoop(self):
         while not self.shutdownFlag:
-            buyEventResult = self.buyReady.wait(5)
+            buyEventResult = self.buyReady.wait(1)
             if buyEventResult:
                 targetItem, targetSeller = buyEventResult
                 self.buyItem(targetSeller, targetItem)
@@ -99,7 +98,11 @@ class BuyerNode(P2PNode):
             if id in self.pendingBuyDict:
                 boughtItem = self.pendingBuyDict[id]
                 self.shoppingBag.append(boughtItem)
-                self.shoppingBag.remove(boughtItem)
+                print "Bought a {0}!".format(boughtItem)
+                for event in self.buyCompleteEvents:
+                    if event.item == boughtItem:
+                        event.set(True)
+                        break
                 self.dataLock.release()
                 return True
         self.dataLock.release()
@@ -110,11 +113,13 @@ class BuyerNode(P2PNode):
             item = data["item"]
             searchID = data["searchID"]
             self.dataLock.acquire()
-            if (item in self.shoppingList 
+            if (item in self.shoppingList
+                and item not in self.shoppingBag
+                and item not in self.pendingBuyDict.values()
                 and searchID in self.activeSearchDict):
                 del self.activeSearchDict[searchID]
                 self.dataLock.release()
-                self.buyItem(connectThread.nodeID, item)
+                self.buyReady.set(item, connectThread.nodeID)
                 return True
             self.dataLock.release()
         return False
@@ -126,15 +131,41 @@ class BuyerNode(P2PNode):
                 stoppedThreadIDs = []
                 for id, thread in self.activeSearchDict.items():
                     if thread.hasFailed:
+                        for event in self.buyCompleteEvents:
+                            if event.item == thread.item:
+                                event.set(False)
+                        print "Couldn't find {0}. :(".format(thread.item)
                         thread.stopFlag = True
                         del self.activeSearchDict[id]
                         stoppedThreadIDs.append(id)
+                        
                 self.dataLock.release()
                 return ("gotnothing", stoppedThreadIDs)
             else:
                 return P2PNode._handleError(inData, connectThread)
         else:
             return ("Bad message", None)
+            
+    def goShopping(self):
+        self.startup()
+        self.trackerConnect()
+        for item in self.shoppingList:
+            self.searchItem(item)
+        for thread in self.activeSearchDict.values():
+            thread.join()
+        for event in self.buyCompleteEvents:
+            event.wait()
+        print "Shopping results:"
+        print "Bought: ",
+        for item in self.shoppingBag:
+            print item,
+        if len(self.shoppingBag) < len(self.shoppingList)
+        print "\nCouldn't find any: ",
+        for item in self.shoppingList:
+            if item not in self.shoppingBag:
+            print item,
+        print "\n"
+        
         
         
 class BuyReadyEvent():
@@ -158,11 +189,35 @@ class BuyReadyEvent():
             return retVal
         else:
             return False
+            
+class BuyCompleteEvent():
+    def __init__(self, item):
+        self._event = threading.Event()
+        self.item = item
+        self.success = None
+    def isSet(self):
+        return self._event.isSet()
+    
+    def set(self, success):
+        self.success = success
+        return self._event.set()
+    
+    def clear(self):
+        self.success = None
+        return self._event.clear()
+        
+    def wait(self, timeout):
+        if self._event.wait(timeout):
+            return (self.item, self.success)
+        else:
+            return None
+        
         
 class SearchReplyEvent():
     def __init__(self):
         self._event = threading.Event()
         self._queue = collections.deque()
+        self._lock = threading.Lock()
         
     def isSet(self):
         return (self._queue and self._event.isSet())
@@ -182,12 +237,20 @@ class SearchReplyEvent():
         else:
             return None
             
-            
+    def waitFor(self, id, timeout=None):
+        startTime = time.time()
+        while (not timeout) or (startTime - time.time() < timeout):
+            if self._queue and self._queue[0] == id and self._event.wait(timeout):
+                retVal = self._queue.popleft()
+                return retVal
+            time.sleep(0.5)
+        return None
         
 class AwaitSearchReplyThread(threading.Thread):
-    def __init__(self, thisNode, searchID, timeout=10):
+    def __init__(self, thisNode, item, searchID, timeout=10):
         threading.Thread.__init__(self, target=self.waitLoop)
         self.thisNode = thisNode
+        self.item = item
         self.searchID = searchID
         self.hasFailed = False
         self.stopFlag = False
@@ -198,12 +261,10 @@ class AwaitSearchReplyThread(threading.Thread):
         replyEvent = self.thisNode.searchReplyEvent
         while not self.stopFlag:
             timeLeft = self.timeout - (time.time()-startTime)
-            replyID = replyEvent.wait(timeLeft)
+            replyID = replyEvent.waitFor(self.searchID, timeLeft)
             if replyID == None:
                 self.hasFailed = True
                 self.thisNode.requestOtherNode()
-            elif replyID != self.searchID:
-                replyEvent.set(replyID)
             else:
                 self.stopFlag = True
         return 
