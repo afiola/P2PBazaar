@@ -5,7 +5,8 @@ import time
 from p2pbazaar import trackerPort
 
 class P2PNode:
-    def __init__(self, inTrackerPort = trackerPort):
+    def __init__(self, debug=False, inTrackerPort = trackerPort):
+        self.debug = debug
         self.idNum = -1
         self.trackerThread = TrackerConnectionThread(thisNode = self, trackerPort = inTrackerPort)
         self.listenThread = ListenThread(thisNode = self)
@@ -30,8 +31,9 @@ class P2PNode:
     def requestOtherNode(self):
         msg = self._makeNodeReq()
         self.trackerThread.send(msg)
+        self.nodeReplyEvent.clear()
         self.trackerThread.expectingNodeReply = True
-        return True
+        return self.nodeReplyEvent.wait(10)
         
     def connectNode(self, otherID, otherNodePort):
         newSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -164,6 +166,7 @@ class P2PNode:
                     connectThread.connectedEvent.set()
                 connectThread.expectingPing = False
                 connectThread.dataLock.release()
+                import pdb; pdb.set_trace()
                 return True
             connectThread.dataLock.release()
         return False
@@ -210,6 +213,7 @@ class P2PNode:
             and "port" in inData
             and self.trackerThread.expectingNodeReply):
             self.connectNode(otherID = inData["id"], otherNodePort = inData["port"])
+            self.nodeReplyEvent.set()
             self.trackerThread.expectingNodeReply = False
             return True
         return False
@@ -241,6 +245,7 @@ class ListenThread(threading.Thread):
 class NodeConnectionThread(threading.Thread):
     def __init__(self, thisNode, nodeSocket, otherID = -1, originHere = False):
         threading.Thread.__init__(self, target=self.receiveLoop)
+        self.debug = thisNode.debug
         self.thisNode = thisNode
         self.nodeSocket = nodeSocket
         self.nodePort = nodeSocket.getsockname()[1]
@@ -255,8 +260,11 @@ class NodeConnectionThread(threading.Thread):
         if originHere:
             msg = self.thisNode._makeTIM()
             self.send(msg)
-            self.connectedEvent.set()
+            self.thisNode.dataLock.acquire()
             self.thisNode.connectedNodeDict[otherID] = self
+            self.thisNode.dataLock.release()
+            self.connectedEvent.set()
+            #import pdb; pdb.set_trace()
         else:
             awaitTIMThread = threading.Thread(target=self.awaitTIM)
             awaitTIMThread.start()
@@ -272,6 +280,8 @@ class NodeConnectionThread(threading.Thread):
                 continue
             else:
                 sentPing = False
+                if self.debug:
+                    print "Node {0} received message {1} from node {2}.".format(self.thisNode.idNum, recvData, self.nodeID)
                 if recvData != "":
                     self.thisNode.handleReceivedNode(inPacketData = recvData, connectThread = self)
                 else:
@@ -291,6 +301,7 @@ class NodeConnectionThread(threading.Thread):
         self.sendLock.acquire()
         try:
             self.nodeSocket.send(packetData)
+            print "Node {0} sent message {1} to node {2}.".format(self.thisNode.idNum, packetData, self.nodeID)
         except socket.error:
             self.dcFlag = True
         finally:
@@ -309,6 +320,7 @@ class NodeConnectionThread(threading.Thread):
 class TrackerConnectionThread(threading.Thread):
     def __init__(self, thisNode, trackerPort):
         threading.Thread.__init__(self, target=self.trackerLoop)
+        self.debug = thisNode.debug
         self.thisNode = thisNode
         self.trackerPort = trackerPort
         self.trackerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -333,6 +345,8 @@ class TrackerConnectionThread(threading.Thread):
             except socket.timeout:
                 pass
             else:
+                if self.debug and "ping" not in response:
+                    print "Node {0} received message {1} from tracker.".format(self.thisNode.idNum, response)
                 if response != "":
                     self.thisNode.handleReceivedTracker(inPacketData = response)
                 else:
@@ -344,6 +358,8 @@ class TrackerConnectionThread(threading.Thread):
         self.sendLock.acquire()
         self.trackerSocket.send(packetData)
         self.sendLock.release()
+        if self.debug and "ping" not in packetData:
+            print "Node {0} sent message {1} to tracker.".format(self.thisNode.idNum, packetData)
         
     def awaitTIY(self):
         while not self.connectEvent.isSet() and not self.shutdownFlag:

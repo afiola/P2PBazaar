@@ -7,14 +7,14 @@ import collections
 from p2pbazaar import trackerPort
 
 class BuyerNode(P2PNode):
-    def __init__(self, *args):
-        P2PNode.__init__(self)
+    def __init__(self, debug=False, itemList = []):
+        P2PNode.__init__(self, debug)
         self.buyReady = BuyReadyEvent()
         self.buyCompleteEvents = []
         self.searchReplyEvent = SearchReplyEvent()
         self.shoppingList = []
-        for arg in args:
-            self.shoppingList.append(str(arg))
+        if itemList:
+            self.shoppingList.extend(itemList)
         self.shoppingBag = []
         self.pendingBuyDict = {}
         self.activeSearchDict = {}
@@ -26,6 +26,10 @@ class BuyerNode(P2PNode):
         self.buyReadyThread.start()
         
     def searchItem(self, targetItem):
+        if not self.connectedNodeDict:
+            if not self.requestOtherNode():
+                self.shutdown()
+                return []
         searchID = random.randint(1, 1000000)
         msg = self._makeSearch(item = targetItem, searchID = searchID)
         newSearchThread = AwaitSearchReplyThread(thisNode = self, item = targetItem, searchID = searchID)
@@ -142,13 +146,19 @@ class BuyerNode(P2PNode):
                 self.dataLock.release()
                 return ("gotnothing", stoppedThreadIDs)
             else:
-                return P2PNode._handleError(inData, connectThread)
+                return P2PNode._handleError(self, inData, connectThread)
         else:
             return ("Bad message", None)
             
     def goShopping(self):
         self.startup()
-        self.trackerConnect()
+        trackerSuccess = self.trackerConnect()
+        if self.debug:
+            if trackerSuccess:
+                print "Buyer node {0} connected to tracker and received ID.".format(self.idNum)
+            else:
+                print "Buyer node failed to connect to tracker."
+        #import pdb; pdb.set_trace()
         for item in self.shoppingList:
             self.searchItem(item)
         for thread in self.activeSearchDict.values():
@@ -267,7 +277,8 @@ class AwaitSearchReplyThread(threading.Thread):
                 replyID = replyEvent.waitFor(self.searchID, timeLeft)
                 if replyID == None:
                     self.hasFailed = True
-                    self.thisNode.requestOtherNode()
+                    if not self.thisNode.requestOtherNode():
+                        self.stopFlag = True
                 else:
                     self.stopFlag = True
             else:

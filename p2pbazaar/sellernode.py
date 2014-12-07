@@ -7,14 +7,11 @@ import collections
 from p2pbazaar import trackerPort
 
 class SellerNode(P2PNode):
-    def __init__(self, itemList=[], *args):
-        P2PNode.__init__(self)
-        
+    def __init__(self, debug = False, itemList=[]):
+        P2PNode.__init__(self, debug)
         self.inventory = []
         if itemList:
             self.inventory.extend(itemList)
-        for arg in args:
-            self.inventory.append(arg)
             
         self.purchaseRecord = []
         self.deferredReplies = {}
@@ -109,4 +106,9 @@ class SellerNode(P2PNode):
         
     def setUpShop(self):
         self.startup()
-        self.trackerConnect()
+        trackerSuccess = self.trackerConnect()
+        if self.debug:
+            if trackerSuccess:
+                print "Seller node {0} connected to tracker and received ID.".format(self.idNum)
+            else:
+                print "Seller node failed to connect to tracker."
