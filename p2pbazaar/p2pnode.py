@@ -316,6 +316,7 @@ class TrackerConnectionThread(threading.Thread):
         self.connectEvent = threading.Event()
         self.shutdownFlag = False
         self.expectingNodeReply = False
+        self.expectingPing = False
         self.sendLock = threading.Lock()
         
         

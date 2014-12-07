@@ -208,7 +208,7 @@ class BuyCompleteEvent():
         self.success = None
         return self._event.clear()
         
-    def wait(self, timeout):
+    def wait(self, timeout=None):
         if self._event.wait(timeout):
             return (self.item, self.success)
         else:
