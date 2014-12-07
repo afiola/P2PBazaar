@@ -363,7 +363,7 @@ class TrackerConnectionThread(threading.Thread):
     def awaitTIY(self):
         while not self.connectEvent.isSet() and not self.shutdownFlag:
             if not self.connectEvent.wait(3):
-                msg = self.thisNode._makeError(errorCode = "notim")
+                msg = self.thisNode._makeError(errorCode = "notiy")
                 self.send(msg)
         
 
