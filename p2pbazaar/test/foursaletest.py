@@ -9,18 +9,25 @@ if __name__ == "__main__":
     tracker = Tracker()
     tracker.startup()
     sellerNodeList = []
-    sellerNodeList.append(SellerNode(debug = True, itemList = ["shoes", "socks", "plutonium"]))
-    sellerNodeList.append(SellerNode(debug = True, itemList = ["socks", "plutonium", "Nintendo 64"]))
+    sellerThreadList = []
+    sellerNodeList.append(SellerNode(debug = False, itemList = ["shoes", "socks", "plutonium"]))
+    sellerNodeList.append(SellerNode(debug = False, itemList = ["socks", "plutonium", "Nintendo 64"]))
     for node in sellerNodeList:
-        node.setUpShop()
+        sellerThreadList.append(threading.Thread(target = node.setUpShop))
+    for thread in sellerThreadList:
+        thread.start()
     buyerNodeList = []
-    buyerNodeList.append(BuyerNode(debug = True, itemList = ["shoes", "plutonium"]))
+    buyerNodeList.append(BuyerNode(debug = False, itemList = ["shoes", "plutonium"]))
     buyerNodeList.append(BuyerNode(debug = True, itemList = ["socks", "Nintendo 64"]))
     buyerThreadList = []
     for node in buyerNodeList:
         buyerThreadList.append(threading.Thread(target = node.goShopping))
     for thread in buyerThreadList:
         thread.start()
-    for node in sellerNodeList:
+    for node, thread in zip(buyerNodeList, buyerThreadList):
+        thread.join()
         node.shutdown()
+    for node, thread in zip(sellerNodeList, sellerThreadList):
+        node.shutdown()
+        thread.join()
     tracker.shutdown()

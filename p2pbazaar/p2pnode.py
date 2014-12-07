@@ -263,7 +263,6 @@ class NodeConnectionThread(threading.Thread):
             self.thisNode.connectedNodeDict[otherID] = self
             self.thisNode.dataLock.release()
             self.connectedEvent.set()
-            #import pdb; pdb.set_trace()
         else:
             awaitTIMThread = threading.Thread(target=self.awaitTIM)
             awaitTIMThread.start()
@@ -274,8 +273,10 @@ class NodeConnectionThread(threading.Thread):
                 recvData = self.nodeSocket.recv(4096)
             except socket.timeout:
                 continue
-            except socket.error:
+            except socket.error as e:
                 self.dcFlag = True
+                if self.debug:
+                    print e
                 continue
             else:
                 sentPing = False
@@ -291,8 +292,9 @@ class NodeConnectionThread(threading.Thread):
         self.thisNode.dataLock.release()
         try:
             self.nodeSocket.shutdown(socket.SHUT_RDWR)
-        except socket.error:
-            pass
+        except socket.error as e:
+            if self.debug:
+                print e.reason
         self.nodeSocket.close()
         return
         
@@ -301,8 +303,10 @@ class NodeConnectionThread(threading.Thread):
         try:
             self.nodeSocket.send(packetData)
             print "Node {0} sent message {1} to node {2}.".format(self.thisNode.idNum, packetData, self.nodeID)
-        except socket.error:
+        except socket.error as e:
             self.dcFlag = True
+            if self.debug:
+                    print e
         finally:
             self.sendLock.release()
         

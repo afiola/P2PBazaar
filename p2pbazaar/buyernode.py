@@ -7,8 +7,9 @@ import collections
 from p2pbazaar import trackerPort
 
 class BuyerNode(P2PNode):
-    def __init__(self, debug=False, itemList = []):
+    def __init__(self, debug=False, itemList = [], shutdownWhenDone=False):
         P2PNode.__init__(self, debug)
+        self.shutdownWhenDone = shutdownWhenDone
         self.buyReady = BuyReadyEvent()
         self.buyCompleteEvents = []
         self.searchReplyEvent = SearchReplyEvent()
@@ -159,14 +160,14 @@ class BuyerNode(P2PNode):
                 print "Buyer node {0} connected to tracker and received ID.".format(self.idNum)
             else:
                 print "Buyer node failed to connect to tracker."
-        #import pdb; pdb.set_trace()
         for item in self.shoppingList:
             self.searchItem(item)
         for thread in self.activeSearchDict.values():
             thread.join()
         for event in self.buyCompleteEvents:
             event.wait()
-        self.shutdown()
+        if self.shutdownWhenDone:
+            self.shutdown()
         print "{0} Shopping results:".format(self.idNum)
         print "Bought: ",
         for item in self.shoppingBag:

@@ -12,7 +12,7 @@ class SellerNode(P2PNode):
         self.inventory = []
         if itemList:
             self.inventory.extend(itemList)
-            
+        self.shutdownEvent = threading.Event()
         self.purchaseRecord = []
         self.deferredReplies = {}
         
@@ -21,6 +21,7 @@ class SellerNode(P2PNode):
         
     def shutdown(self):
         P2PNode.shutdown(self)
+        self.shutdownEvent.set()
         
     def connectNode(self, otherID, otherNodePort):
         if P2PNode.connectNode(self, otherID, otherNodePort):
