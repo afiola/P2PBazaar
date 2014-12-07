@@ -44,8 +44,8 @@ class SellerNode(P2PNode):
         return False
                 
         
-    def reply(self, buyerID, searchID):
-        msg = self._makeReply(searchID)
+    def reply(self, buyerID, item, searchID):
+        msg = self._makeReply(item, searchID)
         self.dataLock.acquire()
         if buyerID in self.connectedNodeDict:
             self.connectedNodeDict[buyerID].send(msg)
@@ -86,14 +86,14 @@ class SellerNode(P2PNode):
                     self.requestSpecificNode(path[0])
                 else:
                     self.dataLock.release()
-                    self.reply(id, path[0])
+                    self.reply(path[0], item, id)
                 return True
             else:
                 self.passOnSearchRequest(data)
         return False
         
-    def _makeReply(self, searchID):
-        returnMsg = json.dumps({"type":"reply", "searchID":searchID})
+    def _makeReply(self, item, searchID):
+        returnMsg = json.dumps({"type":"reply", "item":item, "searchID":searchID})
         return returnMsg
         
     def _makeSpecificNodeReq(self, id):

@@ -166,7 +166,6 @@ class P2PNode:
                     connectThread.connectedEvent.set()
                 connectThread.expectingPing = False
                 connectThread.dataLock.release()
-                import pdb; pdb.set_trace()
                 return True
             connectThread.dataLock.release()
         return False
