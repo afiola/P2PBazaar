@@ -16,7 +16,7 @@ class SellerNode(P2PNode):
         for arg in args:
             self.inventory.append(arg)
             
-        self.buyRequestsReceived = []
+        self.purchaseRecord = []
         self.deferredReplies = {}
         
     def startup(self):
@@ -29,6 +29,7 @@ class SellerNode(P2PNode):
         if P2PNode.connectNode(self, otherID, otherNodePort):
             if otherID in self.deferredReplies:
                 self.reply(otherID, self.deferredReplies[otherID])
+                del self.deferredReplies[otherID]
             return True
         return False
         
@@ -56,8 +57,24 @@ class SellerNode(P2PNode):
         self.dataLock.release()
         return False
         
+    def requestSpecificNode(self, id):
+        msg = self._makeSpecificNodeReq(id)
+        self.trackerThread.send(msg)
+        self.trackerThread.expectingNodeReply = True
+        return True
+        
     def _handleBuyRequest(self, data, connectThread):
-        pass
+        if "item" in data and "id" in data:
+            item, id = data["item"], data["id"]
+            self.dataLock.acquire()
+            if item in self.inventory:
+                msg = self._makeBuyOK(id)
+                connectThread.send(msg)
+                self.purchaseRecord.append((item, connectThread.nodeID))
+                self.dataLock.release()
+                return True
+            self.dataLock.release()
+        return False
         
     def _handleSearch(self, data):
         if "item" in data and "id" in data and "returnPath" in data:
@@ -77,12 +94,6 @@ class SellerNode(P2PNode):
             else:
                 self.passOnSearchRequest(data)
         return False
-                    
-    def requestSpecificNode(self, id):
-        msg = self._makeSpecificNodeReq(id)
-        self.trackerThread.send(msg)
-        self.trackerThread.expectingNodeReply = True
-        return True
         
     def _makeReply(self, searchID):
         returnMsg = json.dumps({"type":"reply", "searchID":searchID})
@@ -92,3 +103,6 @@ class SellerNode(P2PNode):
         returnMsg = json.dumps({"type":"nodereq", "id":id})
         return returnMsg
         
+    def _makeBuyOK(self, id):
+        returnMsg = json.dumps({"type":"buyOK", "id":id})
+        return returnMsg
