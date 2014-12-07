@@ -20,7 +20,7 @@ class Tracker():
         self.debug = inDebug
         self.testMode = inTestMode
         self.hostName = inHostName
-        self.connectLock = threading.Lock()
+        self.connectLock = threading.RLock()
         self.connectLock.acquire()
         self.quitFlag = False
         self.listenPort = inPort
@@ -41,16 +41,18 @@ class Tracker():
     def _listenLoop(self):
         #Restart-or-quit loop:
         while not self.quitFlag:
-            self.connectLock.acquire()
-            #Initialize and bind listen socket.
-            self.listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            #In order to prevent program from hanging indefinitely,
-            #listen socket silently times out and restarts every 0.5 seconds.
-            self.listenSocket.settimeout(0.5)
-            self.listenSocket.bind((self.hostName, self.listenPort))
-            self.listenSocket.listen(5)
-            self.connectLock.release()
-            
+            with self.connectLock:
+                try:
+                    #Initialize and bind listen socket.
+                    self.listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    #In order to prevent program from hanging indefinitely,
+                    #listen socket silently times out and restarts every 0.5 seconds.
+                    self.listenSocket.settimeout(0.5)            
+                    self.listenSocket.bind((self.hostName, self.listenPort))
+                except socket.error:
+                    #self.connectLock.release()
+                    continue
+                self.listenSocket.listen(5)
             #Listen for and establish new connections.
             pauseListenFlag = False
             while not pauseListenFlag:
@@ -204,10 +206,12 @@ class Tracker():
                     dcFlag = True
                     if self.debug:
                         #print "Tracker received empty string"
+                        pass
                 else:
                     recvData = json.loads(received)
                     if self.debug:
                         #print "Tracker received data from {0}: {1}".format(connID, recvData)
+                        pass
                     lastConnTime = time.time()
                     self.handleReceived(inSocket = connSocket, inID = connID, inData = recvData, expectingPing = isExpectingPing)
                     isExpectingPing = False
@@ -219,11 +223,13 @@ class Tracker():
             except ValueError:
                 if self.debug:
                     #print "Sending error message to {0}".format(connID)
+                    pass
                 self._sendError(inSocket = connSocket, inCode = "wtf")
             except socket.error as e:
                 if self.debug:
                     #print "Connection {0} terminated unexpectedly".format(connID)
                     #print e
+                    pass
                 dcFlag = True
             deltaTime = time.time() - lastConnTime
             #if self.debug:
@@ -239,6 +245,7 @@ class Tracker():
                 if(self.testMode):
                     dcFlag = True
                     if self.debug:
+                        pass
                         #print "Set DCFlag for ID {0}.".format(connID)
                 elif not sentPing30:
                     self._sendPing(inSocket = connSocket)
@@ -247,6 +254,7 @@ class Tracker():
             elif deltaTime >= 15 and not dcFlag and not sentPing15:
                 if self.debug:
                     #print "ID {0} is awfully quiet, sending ping...".format(connID)
+                    pass
                 self._sendPing(inSocket = connSocket)
                 isExpectingPing = True
                 sentPing15 = True
@@ -272,6 +280,7 @@ class Tracker():
         if "type" not in inData:
             if self.debug:
                 #print "Sending missing type error to {0}".format(inID)
+                pass
             self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Missing message type")
         elif inData["type"] == "thisisme":
             self.connectLock.acquire()
@@ -282,37 +291,44 @@ class Tracker():
                     else:
                         if self.debug:
                             #print "Sending invalid port error to {0}".format(inID)
+                            pass
                         self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Port must be greater than 0.")
                 except TypeError:
                     if self.debug:
                         #print "Sending invalid port error to {0}".format(inID)
+                        pass
                     self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Port must be a number.")
             self.connectLock.release()
         elif inData["type"] == "ping":
             if not expectingPing:
                 if self.debug:
                     #print "Sending ping to {0}".format(inID)
+                    pass
                 self._sendPing(inSocket = inSocket)
         elif inData["type"] == "nodereq":
             if "id" not in inData or inData["id"] <= 0 or inData["id"] not in self.activeNodeDict:
-                if "idList" in inData and set(inData["idList"]) != set(self.activeNodeDict.keys()):
+                if "idList" not in inData or set(inData["idList"]) != set(self.activeNodeDict.keys()):
                     targetID = -1
                     self.connectLock.acquire()
-                    while targetID not in self.activeNodeDict or targetID in inData["idList"]:
+                    while ( targetID not in self.activeNodeDict 
+                            or ("idList" in inData and targetID in inData["idList"])
+                            or targetID == inID):
                         targetID = random.choice(self.activeNodeDict.keys())
                     if self.debug:
                         #print "Sending NodeReply to {0}".format(inID)
+                        pass
                     self._sendNodeReply(inSocket = inSocket, inID = targetID, inPort = self.activeNodeDict[targetID]['port'])
+                    self.connectLock.release()
                 else:
                     self._sendError(inSocket = inSocket, inCode = "gotnothing", 
                                     inReadableMsg = "You're already connected to every node I've got!")
             else:
                 targetID = inData["id"]
                 self._sendNodeReply(inSocket = inSocket, inID = targetID, inPort = self.activeNodeDict[targetID]['port'])
-            self.connectLock.release()
         else: 
             if self.debug:
                 #print "Sending unrecognized message type error to {0}".format(inID)
+                pass
             self._sendError(inSocket = inSocket, inCode = "wtf", inReadableMsg = "Unrecognized message type.")
             
             

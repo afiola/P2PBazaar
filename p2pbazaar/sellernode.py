@@ -106,3 +106,7 @@ class SellerNode(P2PNode):
     def _makeBuyOK(self, id):
         returnMsg = json.dumps({"type":"buyOK", "id":id})
         return returnMsg
+        
+    def setUpShop(self):
+        self.startup()
+        self.trackerConnect()

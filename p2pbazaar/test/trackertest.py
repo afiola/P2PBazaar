@@ -27,10 +27,6 @@ class TrackerTest(unittest.TestCase):
         
     def tearDown(self):
         try:
-            self.testTracker.connectLock.release()
-        except ThreadError:
-            pass
-        try:
             self.testSocket1.shutdown(socket.SHUT_RDWR)
         except socket.error:
             pass

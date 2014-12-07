@@ -98,7 +98,7 @@ class BuyerNode(P2PNode):
             if id in self.pendingBuyDict:
                 boughtItem = self.pendingBuyDict[id]
                 self.shoppingBag.append(boughtItem)
-                print "Bought a {0}!".format(boughtItem)
+                print "{0} bought {1}!".format(self.idNum, boughtItem)
                 for event in self.buyCompleteEvents:
                     if event.item == boughtItem:
                         event.set(True)
@@ -134,7 +134,7 @@ class BuyerNode(P2PNode):
                         for event in self.buyCompleteEvents:
                             if event.item == thread.item:
                                 event.set(False)
-                        print "Couldn't find {0}. :(".format(thread.item)
+                        print "{0} couldn't find {1}. :(".format(self.idNum, thread.item)
                         thread.stopFlag = True
                         del self.activeSearchDict[id]
                         stoppedThreadIDs.append(id)
@@ -155,16 +155,18 @@ class BuyerNode(P2PNode):
             thread.join()
         for event in self.buyCompleteEvents:
             event.wait()
-        print "Shopping results:"
+        self.shutdown()
+        print "{0} Shopping results:".format(self.idNum)
         print "Bought: ",
         for item in self.shoppingBag:
             print item,
-        if len(self.shoppingBag) < len(self.shoppingList)
-        print "\nCouldn't find any: ",
-        for item in self.shoppingList:
-            if item not in self.shoppingBag:
-            print item,
+        if len(self.shoppingBag) < len(self.shoppingList):
+            print "\nCouldn't find any: ",
+            for item in self.shoppingList:
+                if item not in self.shoppingBag:
+                    print item,
         print "\n"
+        return
         
         
         
@@ -239,7 +241,7 @@ class SearchReplyEvent():
             
     def waitFor(self, id, timeout=None):
         startTime = time.time()
-        while (not timeout) or (startTime - time.time() < timeout):
+        while (not timeout) or (time.time() - startTime < timeout):
             if self._queue and self._queue[0] == id and self._event.wait(timeout):
                 retVal = self._queue.popleft()
                 return retVal
@@ -261,10 +263,13 @@ class AwaitSearchReplyThread(threading.Thread):
         replyEvent = self.thisNode.searchReplyEvent
         while not self.stopFlag:
             timeLeft = self.timeout - (time.time()-startTime)
-            replyID = replyEvent.waitFor(self.searchID, timeLeft)
-            if replyID == None:
-                self.hasFailed = True
-                self.thisNode.requestOtherNode()
+            if timeLeft > 0:
+                replyID = replyEvent.waitFor(self.searchID, timeLeft)
+                if replyID == None:
+                    self.hasFailed = True
+                    self.thisNode.requestOtherNode()
+                else:
+                    self.stopFlag = True
             else:
                 self.stopFlag = True
         return 
