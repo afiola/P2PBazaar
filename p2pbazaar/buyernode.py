@@ -121,6 +121,7 @@ class BuyerNode(P2PNode):
                 and item not in self.shoppingBag
                 and item not in self.pendingBuyDict.values()
                 and searchID in self.activeSearchDict):
+                self.searchReplyEvent.set(searchID)
                 del self.activeSearchDict[searchID]
                 self.dataLock.release()
                 self.buyReady.set(item, connectThread.nodeID)
