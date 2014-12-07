@@ -36,6 +36,7 @@ class TrackerTest(unittest.TestCase):
         except socket.error:
             pass
         self.testSocket2.close()
+        self.testTracker.shutdown()
         for currentThread in self.testTracker.connThreadList:
             #print "Waiting for thread \"{0}\" to finish...".format(currentThread.name) 
             currentThread.join()

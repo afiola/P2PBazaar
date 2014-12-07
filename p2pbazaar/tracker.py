@@ -55,7 +55,7 @@ class Tracker():
                 self.listenSocket.listen(5)
             #Listen for and establish new connections.
             pauseListenFlag = False
-            while not pauseListenFlag:
+            while not pauseListenFlag and not self.quitFlag:
                 try:
                     newConn, newConnAddr = self.listenSocket.accept()
                     '''If a new connection is detected, awaits a ThisIsMe
@@ -94,14 +94,15 @@ class Tracker():
                 #Handle a normal timeout. Triggers shutdown ("pause") if no active
                 #connections for 30 seconds.
                 except timeout:
-                    if (not self.activeNodeDict) and ((time.time() - self.lastConnTime) > 30 or (self.testMode and time.time() - self.lastConnTime > 5)):
-                        pauseListenFlag = True
+                    '''if (not self.activeNodeDict) and ((time.time() - self.lastConnTime) > 30 or (self.testMode and time.time() - self.lastConnTime > 5)):
+                        pauseListenFlag = True'''
+                    pass
                 #If a node can't seem to get its ThisIsMe right, shut down the connection.
                 except BadConnectionException as e:
                     self._closeSocket(inSocket = e.badSocket, inID = e.badID, inReceivedDC = False)
             #This chunk only runs once there have been no active connections
             #for 30 seconds, and asks the user to restart or quit.
-            if not self.testMode:
+            '''if not self.testMode:
                 print "No active connections. Tracker has shut down."
                 shouldQuitInput = ""
                 while shouldQuitInput != 'r' and shouldQuitInput != 'q':
@@ -112,8 +113,7 @@ class Tracker():
                     elif shouldQuitInput == 'r':
                         print "Restarting..."
             else:
-                self.quitFlag = True
-        self._shutdown()
+                self.quitFlag = True'''
         
     #Handles the ThisIsMe message sent by a node connecting to the tracker
     #for the first time. Needs only to grab a valid listen port.
@@ -262,13 +262,8 @@ class Tracker():
         self._closeSocket(inSocket = connSocket, inID = connID)
         return
     
-    def _shutdown(self):
-        for currentID in self.activeNodeDict:
-            self.connectLock.acquire()
-            self._closeSocket(inSocket = activeNodeDict[currentID], inID = currentID)
-            self.connectLock.release()
-        for currentThread in self.connThreadList:
-            currentThread.join()
+    def shutdown(self):
+        self.quitFlag = True
         
         
             
