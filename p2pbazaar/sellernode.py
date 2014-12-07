@@ -17,12 +17,20 @@ class SellerNode(P2PNode):
             self.inventory.append(arg)
             
         self.buyRequestsReceived = []
+        self.deferredReplies = {}
         
     def startup(self):
         P2PNode.startup(self)
         
     def shutdown(self):
         P2PNode.shutdown(self)
+        
+    def connectNode(self, otherID, otherNodePort):
+        if P2PNode.connectNode(self, otherID, otherNodePort):
+            if otherID in self.deferredReplies:
+                self.reply(otherID, self.deferredReplies[otherID])
+            return True
+        return False
         
     def handleReceivedNode(self, inPacketData, connectThread):
         data = json.loads(inPacketData)
@@ -52,10 +60,35 @@ class SellerNode(P2PNode):
         pass
         
     def _handleSearch(self, data):
-        pass
+        if "item" in data and "id" in data and "returnPath" in data:
+            item = data["item"]
+            id = data["id"]
+            path = data["returnPath"]
+            self.dataLock.acquire()
+            if item in self.inventory:
+                if path[0] not in self.connectedNodeDict:
+                    self.deferredReplies[path[0]] = id
+                    self.dataLock.release()
+                    self.requestSpecificNode(path[0])
+                else:
+                    self.dataLock.release()
+                    self.reply(id, path[0])
+                return True
+            else:
+                self.passOnSearchRequest(data)
+        return False
+                    
+    def requestSpecificNode(self, id):
+        msg = self._makeSpecificNodeReq(id)
+        self.trackerThread.send(msg)
+        self.trackerThread.expectingNodeReply = True
+        return True
         
     def _makeReply(self, searchID):
         returnMsg = json.dumps({"type":"reply", "searchID":searchID})
         return returnMsg
         
-    
+    def _makeSpecificNodeReq(self, id):
+        returnMsg = json.dumps({"type":"nodereq", "id":id})
+        return returnMsg
+        
