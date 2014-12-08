@@ -33,16 +33,16 @@ class BuyerNode(P2PNode):
                 return []
         searchID = random.randint(1, 1000000)
         msg = self._makeSearch(item = targetItem, searchID = searchID)
-        newSearchThread = AwaitSearchReplyThread(thisNode = self, item = targetItem, searchID = searchID)
         self.dataLock.acquire()
         self.buyCompleteEvents.append(BuyCompleteEvent(targetItem))
-        self.activeSearchDict[searchID] = newSearchThread
         self.searchRequestsSentList.append(searchID)
         self.searchRequestsReceivedDict[searchID] = []
         sentNodes = []
         for node in self.connectedNodeDict.values():
             node.send(msg)
             sentNodes.append(node.nodeID)
+        newSearchThread = AwaitSearchReplyThread(thisNode = self, item = targetItem, searchID = searchID, sentNodes = sentNodes)
+        self.activeSearchDict[searchID] = newSearchThread
         self.dataLock.release()
         newSearchThread.start()
         return sentNodes
@@ -51,6 +51,7 @@ class BuyerNode(P2PNode):
         P2PNode.shutdown(self)
         for thread in self.activeSearchDict.values():
             thread.stopFlag = True
+        self.buyReady.set(None, None)
         
     def buyItem(self, sellerID, targetItem):
         if sellerID in self.connectedNodeDict:
@@ -90,10 +91,11 @@ class BuyerNode(P2PNode):
         
     def _buyReadyLoop(self):
         while not self.shutdownFlag:
-            buyEventResult = self.buyReady.wait(1)
+            buyEventResult = self.buyReady.wait()
             if buyEventResult:
                 targetItem, targetSeller = buyEventResult
                 self.buyItem(targetSeller, targetItem)
+                self.buyReady.clear()
                 
     def _handleBuyOK(self, data):
         self.dataLock.acquire()
@@ -135,6 +137,7 @@ class BuyerNode(P2PNode):
             if inData["code"] == "gotnothing":
                 self.dataLock.acquire()
                 stoppedThreadIDs = []
+                self.nodeReplyEvent.set(False)
                 for id, thread in self.activeSearchDict.items():
                     if thread.hasFailed:
                         for event in self.buyCompleteEvents:
@@ -198,8 +201,10 @@ class BuyReadyEvent():
         return self._event.clear()
         
     def wait(self, timeout = None):
-        if self._queue and self._event.wait(timeout):
+        if self._event.wait(timeout) and self._queue:
             retVal = self._queue.popleft()
+            if retVal == (None, None):
+                return False
             return retVal
         else:
             return False
@@ -231,13 +236,17 @@ class SearchReplyEvent():
     def __init__(self):
         self._event = threading.Event()
         self._queue = collections.deque()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._eventDict = {}
         
     def isSet(self):
         return (self._queue and self._event.isSet())
     
     def set(self, searchID):
         self._queue.append(searchID)
+        if searchID not in self._eventDict:
+            self._eventDict[searchID] = threading.Event()
+        self._eventDict[searchID].set()
         return self._event.set()
     
     def clear(self):
@@ -252,16 +261,12 @@ class SearchReplyEvent():
             return None
             
     def waitFor(self, id, timeout=None):
-        startTime = time.time()
-        while (not timeout) or (time.time() - startTime < timeout):
-            if self._queue and self._queue[0] == id and self._event.wait(timeout):
-                retVal = self._queue.popleft()
-                return retVal
-            time.sleep(0.5)
-        return None
+        if id not in self._eventDict:
+            self._eventDict[id] = threading.Event()
+        return self._eventDict[id].wait(timeout)
         
 class AwaitSearchReplyThread(threading.Thread):
-    def __init__(self, thisNode, item, searchID, timeout=10):
+    def __init__(self, thisNode, item, searchID, sentNodes, timeout=5, attempts=3):
         threading.Thread.__init__(self, target=self.waitLoop)
         self.thisNode = thisNode
         self.item = item
@@ -269,24 +274,30 @@ class AwaitSearchReplyThread(threading.Thread):
         self.hasFailed = False
         self.stopFlag = False
         self.timeout = timeout
+        self.maxAttempts = attempts
+        self.sentNodes = sentNodes
         
     def waitLoop(self):
-        startTime = time.time()
         replyEvent = self.thisNode.searchReplyEvent
-        while not self.stopFlag:
-            timeLeft = self.timeout - (time.time()-startTime)
-            if timeLeft > 0:
-                replyID = replyEvent.waitFor(self.searchID, timeLeft)
-                if replyID == None:
-                    self.hasFailed = True
-                    if not self.thisNode.requestOtherNode():
-                        self.stopFlag = True
-                else:
+        attempts = 0
+        while (not self.stopFlag) and attempts < self.maxAttempts:
+            if not replyEvent.waitFor(self.searchID, self.timeout):
+                attempts = attempts + 1
+                if not self.thisNode.requestOtherNode():
                     self.stopFlag = True
+                else:
+                    self.repeatSearch()
             else:
                 self.stopFlag = True
         return 
-        
+
+    def repeatSearch(self):
+        msg = self.thisNode._makeSearch(self.item,self.searchID)
+        self.thisNode.dataLock.acquire()
+        for node in self.thisNode.connectedNodeDict.values():
+            if node not in self.sentNodes:
+                node.send(msg)
+        self.thisNode.dataLock.release()
                 
                 
                     

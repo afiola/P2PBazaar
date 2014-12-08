@@ -15,7 +15,7 @@ class Tracker:
         self.shutdownFlag = False
         self.nodeReplyEvent = threading.Event()
         self.lastNodeReply = None
-        self.dataLock = threading.Lock()
+        self.dataLock = threading.RLock()
         self.searchRequestsSentList = []
         self.searchRequestsReceivedDict = {}
     
@@ -57,6 +57,8 @@ class Tracker:
             thread.shutdownFlag = True
         self.dataLock.release()
         self.listenThread.shutdownFlag = True
+        if self.debug:
+            print "Tracker shutdown."
         
     def _makePing(self):
         returnMsg = json.dumps({"type":"ping"})
@@ -196,7 +198,7 @@ class ListenThread(threading.Thread):
         self.readyEvent = threading.Event()
         self.listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listenSocket.bind(('localhost', port))
-        self.listenSocket.settimeout(5)
+        #self.listenSocket.settimeout(5)
         self.listenSocket.listen(50)
         self.thisTracker.listenSocket = self.listenSocket
         
@@ -221,8 +223,8 @@ class NodeConnectionThread(threading.Thread):
         self.nodeID = otherID
         self.connectedEvent = NodeConnectionEvent()
         self.dcFlag = False
-        self.nodeSocket.settimeout(5)
-        self.sendLock = threading.Lock()
+        #self.nodeSocket.settimeout(5)
+        self.sendLock = threading.RLock()
         self.dataLock = threading.Lock()
         self.shutdownFlag = False
         self.expectingPing = False
@@ -231,19 +233,33 @@ class NodeConnectionThread(threading.Thread):
         
     def receiveLoop(self):
         while not self.shutdownFlag and not self.dcFlag:
+            #self.sendLock.acquire()
             try:
-                recvData = self.nodeSocket.recv(4096)
+                dataSize = self.nodeSocket.recv(5)
+                if dataSize != "":
+                    recvData = self.nodeSocket.recv(int(dataSize))
             except socket.timeout:
+                #self.sendLock.release()
+                if self.expectingPing:
+                    self.dcFlag = True
+                else:
+                    msg = self.thisTracker._makePing()
+                    self.send(msg)
+                    self.expectingPing = True
                 continue
-            except socket.error:
+            except socket.error as e:
                 self.dcFlag = True
+                #self.sendLock.release()
+                if self.debug:
+                    print e
                 continue
             else:
-                sentPing = False
+                #self.sendLock.release()
                 if self.debug:
                     print "Tracker received message {0} from node {1}.".format(recvData, self.nodeID)
-                if recvData != "":
+                if dataSize != "" and recvData != "":
                     self.thisTracker.handleReceivedNode(inPacketData = recvData, connectThread = self)
+                    self.expectingPing = False
                 else:
                     self.dcFlag = True
         self.thisTracker.dataLock.acquire()
@@ -253,17 +269,23 @@ class NodeConnectionThread(threading.Thread):
         try:
             self.nodeSocket.shutdown(socket.SHUT_RDWR)
         except socket.error:
-            pass
+            if self.debug:
+                print e
         self.nodeSocket.close()
         return
         
     def send(self, packetData):
         self.sendLock.acquire()
+        messageLength = str(len(packetData)).rjust(5)
         try:
+            self.nodeSocket.send(messageLength)
             self.nodeSocket.send(packetData)
-            print "Tracker sent message {0} to node {1}.".format(packetData, self.nodeID)
+            if self.debug:
+                print "Tracker sent message {0} to node {1}.".format(packetData, self.nodeID)
         except socket.error:
             self.dcFlag = True
+            if self.debug:
+                print e
         finally:
             self.sendLock.release()
         

@@ -10,14 +10,14 @@ if __name__ == "__main__":
     tracker.startup()
     sellerNodeList = []
     sellerThreadList = []
-    sellerNodeList.append(SellerNode(debug = False, itemList = ["shoes", "socks", "plutonium"]))
-    sellerNodeList.append(SellerNode(debug = False, itemList = ["socks", "plutonium", "Nintendo 64"]))
+    sellerNodeList.append(SellerNode(debug = True, itemList = ["shoes", "socks", "plutonium"]))
+    sellerNodeList.append(SellerNode(debug = True, itemList = ["socks", "plutonium", "Nintendo 64"]))
     for node in sellerNodeList:
         sellerThreadList.append(threading.Thread(target = node.setUpShop))
     for thread in sellerThreadList:
         thread.start()
     buyerNodeList = []
-    buyerNodeList.append(BuyerNode(debug = False, itemList = ["shoes", "plutonium"]))
+    buyerNodeList.append(BuyerNode(debug = True, itemList = ["shoes", "plutonium"]))
     buyerNodeList.append(BuyerNode(debug = True, itemList = ["socks", "Nintendo 64"]))
     buyerThreadList = []
     for node in buyerNodeList:

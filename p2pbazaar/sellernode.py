@@ -26,7 +26,7 @@ class SellerNode(P2PNode):
     def connectNode(self, otherID, otherNodePort):
         if P2PNode.connectNode(self, otherID, otherNodePort):
             if otherID in self.deferredReplies:
-                self.reply(otherID, self.deferredReplies[otherID])
+                self.reply(otherID, self.deferredReplies[otherID][1], self.deferredReplies[otherID][0])
                 del self.deferredReplies[otherID]
             return True
         return False
@@ -82,7 +82,7 @@ class SellerNode(P2PNode):
             self.dataLock.acquire()
             if item in self.inventory:
                 if path[0] not in self.connectedNodeDict:
-                    self.deferredReplies[path[0]] = id
+                    self.deferredReplies[path[0]] = (id, item)
                     self.dataLock.release()
                     self.requestSpecificNode(path[0])
                 else:
@@ -90,7 +90,7 @@ class SellerNode(P2PNode):
                     self.reply(path[0], item, id)
                 return True
             else:
-                self.passOnSearchRequest(data)
+                P2PNode._handleSearch(self, data)
         return False
         
     def _makeReply(self, item, searchID):

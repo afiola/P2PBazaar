@@ -52,7 +52,6 @@ class SellerProcess(multiprocessing.Process):
         self.stopEvent.set()
 
 if __name__ == "__main__":
-    
     trackerProc = TrackerProcess()
     trackerProc.start()
     sellerProcList = []
@@ -62,9 +61,10 @@ if __name__ == "__main__":
         proc.start()
     buyerProcList = []
     buyerProcList.append(BuyerProcess(debug = True, itemList = ["shoes", "plutonium"]))
-    buyerProcList.append(BuyerNode(debug = True, itemList = ["socks", "Nintendo 64"]))
+    buyerProcList.append(BuyerProcess(debug = True, itemList = ["socks", "Nintendo 64"]))
     for proc in buyerProcList:
         proc.start()
+        #import pdb; pdb.set_trace()
     for proc in buyerProcList:
         proc.shutdown()
     for proc in sellerProcList:

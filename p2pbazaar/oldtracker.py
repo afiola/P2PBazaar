@@ -47,7 +47,7 @@ class Tracker():
                     self.listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     #In order to prevent program from hanging indefinitely,
                     #listen socket silently times out and restarts every 0.5 seconds.
-                    self.listenSocket.settimeout(0.5)            
+                    self.listenSocket.settimeout(5)            
                     self.listenSocket.bind((self.hostName, self.listenPort))
                 except socket.error:
                     #self.connectLock.release()
