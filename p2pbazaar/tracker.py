@@ -268,7 +268,7 @@ class NodeConnectionThread(threading.Thread):
         self.thisTracker.dataLock.release()
         try:
             self.nodeSocket.shutdown(socket.SHUT_RDWR)
-        except socket.error:
+        except socket.error as e:
             if self.debug:
                 print e
         self.nodeSocket.close()
@@ -282,7 +282,7 @@ class NodeConnectionThread(threading.Thread):
             self.nodeSocket.send(packetData)
             if self.debug:
                 print "Tracker sent message {0} to node {1}.".format(packetData, self.nodeID)
-        except socket.error:
+        except socket.error as e:
             self.dcFlag = True
             if self.debug:
                 print e

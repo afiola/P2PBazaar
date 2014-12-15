@@ -4,8 +4,19 @@ import json
 import time
 from p2pbazaar import trackerPort
 
+EVT_BAD_MSG = "Missing or unrecognized message type"
+EVT_NODE_CONNECT = "Node {0} has successfully connected!"
+EVT_NODE_IDUPDATE = "Node {0} ID updated to {1}."
+EVT_NODE_NOUPDATE = "Node {0} already known!"
+EVT_MSG_NOID = "Missing ID number in {0} message from {1}."
+EVT_NOT_TRACKER = "Received a {0} message from a source other than the tracker."
+EVT_PING_RESPONDED = "Got a ping from {0} and sent one back."
+EVT_PING_GOTREPLY = "{0} responded to ping."
+EVT_TRACKER_CONNECT = "Successfully connected to tracker."
+EVT_NOTIM_REPLY = "Got a NOTIM from {0} and resent"
+
 class P2PNode:
-    def __init__(self, debug=False, inTrackerPort = trackerPort):
+    def __init__(self, debug=0, inTrackerPort = trackerPort):
         self.debug = debug
         self.idNum = -1
         self.trackerThread = TrackerConnectionThread(thisNode = self, trackerPort = inTrackerPort)
@@ -49,45 +60,41 @@ class P2PNode:
         targetNodeThread.send(msg)
         targetNodeThread.shutdownFlag = True
         
-    def handleReceivedTracker(self, inPacketData):
+    def handleReceivedTracker(self, inPacketData, event):
         data = json.loads(inPacketData)
         if "type" in data:
             if data["type"] == "thisisyou":
-                self._handleTIY(inData = data, connectThread = self.trackerThread)
-                return True
+                self._handleTIY(inData = data, connectThread = self.trackerThread, event = event)
             elif data["type"] == "ping":
-                self._handlePing(connectThread = self.trackerThread)
-                return True
+                self._handlePing(connectThread = self.trackerThread, event = event)
             elif data["type"] == "error":
-                self._handleError(inData = data, connectThread = self.trackerThread)
-                return True
+                self._handleError(inData = data, connectThread = self.trackerThread, event = event)
             elif data["type"] == "dc":
-                self._handleDC(connectThread = self.trackerThread)
-                return True
+                self._handleDC(connectThread = self.trackerThread, event = event)
             elif data["type"] == "nodereply":
-                self._handleNodeReply(inData = data)
-                return True
+                self._handleNodeReply(inData = data, event = event)
+            return event.wait(5)
+        event.set(success = False, message = EVT_BAD_MSG)
         return False
-        
-    def handleReceivedNode(self, inPacketData, connectThread):
+    
+    def handleReceivedNode(self, inPacketData, connectThread, event):
         data = json.loads(inPacketData)
         if "type" in data:
             if data["type"] == "thisisme":
-                self._handleTIM(inData = data, connectThread = connectThread)
-                return True
+                self._handleTIM(inData = data, connectThread = connectThread, event = event)
             elif data["type"] == "ping":
-                self._handlePing(connectThread = connectThread)
-                return True
+                self._handlePing(connectThread = connectThread, event = event)
             elif data["type"] == "error":
-                self._handleError(inData = data, connectThread = connectThread)
-                return True
+                self._handleError(inData = data, connectThread = connectThread, event = event)
             elif data["type"] == "dc":
-                self._handleDC(connectThread = connectThread)
-                return True
+                self._handleDC(connectThread = connectThread, event = event)
             elif data["type"] == "search":
-                self._handleSearch(inData = data)
-                return True
+                self._handleSearch(inData = data, event = event)
+            return event.wait(5)
+        event.set(success = False, message = EVT_BAD_MSG)
         return False
+        
+    
         
     def passOnSearchRequest(self, searchRequest):
         searchID = searchRequest["id"]
@@ -123,6 +130,7 @@ class P2PNode:
                 
     def _makeTIM(self):
         returnMsg = json.dumps({"type":"thisisme", "port":self.listenSocket.getsockname()[1], "id":self.idNum})
+        
         return returnMsg
         
     def _makePing(self):
@@ -154,49 +162,62 @@ class P2PNode:
         returnMsg = json.dumps(msgDict)
         return returnMsg
         
-    def _handleTIM(self, inData, connectThread):
+    def _handleTIM(self, inData, connectThread, event):
         if "id" in inData:
             newID = inData["id"]
             connectThread.dataLock.acquire()
-            if connectThread.nodeID != newID:
+            oldID = connectThread.nodeID
+            if oldID != newID:
                 self.dataLock.acquire()
-                if connectThread.nodeID in self.connectedNodeDict:
-                    del self.connectedNodeDict[connectThread.nodeID]
+                if oldID in self.connectedNodeDict:
+                    del self.connectedNodeDict[oldID]
                 self.connectedNodeDict[newID] = connectThread
                 self.dataLock.release()
                 connectThread.nodeID = newID
                 if not connectThread.connectedEvent.isSet():
                     connectThread.connectedEvent.set()
+                    event.set(success = True, message = EVT_NODE_CONNECT.format(newID))
+                else:
+                    event.set(success = True, message = EVT_NODE_IDUPDATE.format(oldID, newID))
                 connectThread.expectingPing = False
                 connectThread.dataLock.release()
                 return True
+            event.set(success = False, message = EVT_NODE_NOUPDATE.format(newID))
             connectThread.dataLock.release()
+        event.set(success = False, message = EVT_MSG_NOID.format("ThisIsMe", "Node {0}".format(connectThread.nodeID)))
         return False
         
-    def _handleTIY(self, inData, connectThread):
-        if "id" in inData and connectThread is self.trackerThread:
-            newID = inData["id"]
-            if newID > 0:
-                self.idNum = newID
-                connectThread.connectEvent.set()
-                return True
+    def _handleTIY(self, inData, connectThread, event):
+        if connectThread is self.trackerThread:
+            if "id" in inData 
+                newID = inData["id"]
+                if newID > 0:
+                    self.idNum = newID
+                    connectThread.connectEvent.set()
+                    event.set(success = True, message = EVT_TRACKER_CONNECT)
+                    return True
+            event.set(success = False, message = EVT_MSG_NOID.format("ThisIsYou", "tracker"))
+        event.set(success = False, message = EVT_NOT_TRACKER.format("ThisIsYou"))
         return False
         
-    def _handlePing(self, connectThread):
+    def _handlePing(self, connectThread, event):
         if not connectThread.expectingPing:
             msg = self._makePing()
             connectThread.send(msg)
+            event.set(success = True, message = EVT_PING_RESPONDED.format(connectThread.nodeID))
             return True
         else:
             connectThread.expectingPing = False
+            event.set(success = True, message = EVT_PING_GOTREPLY.format(connectThread.nodeID))
             return False
             
-    def _handleError(self, inData, connectThread):
+    def _handleError(self, inData, connectThread, event):
         if "code" in inData:
             errorCode = inData["code"]
             if errorCode == "notim":
                 msg = self._makeTIM()
                 connectThread.send(msg)
+                event.set(success = True, message = 
                 return ("notim", None)
             return ("Unrecognized message", None)
         return ("Bad message", None)
@@ -295,8 +316,11 @@ class NodeConnectionThread(threading.Thread):
                 if dataSize != "" and recvData != "":
                     if self.debug:
                         print "Node {0} received message {1} from node {2}.".format(self.thisNode.idNum, recvData, self.nodeID)
-                    self.thisNode.handleReceivedNode(inPacketData = recvData, connectThread = self)
+                    event = MessageHandledEvent()
+                    self.thisNode.handleReceivedNode(inPacketData = recvData, connectThread = self, event = event)
                     self.expectingPing = False
+                    if self.debug and not event.isSet():
+                        print "Error: Message not handled."
                 else:
                     self.dcFlag = True
             finally:
@@ -352,6 +376,7 @@ class TrackerConnectionThread(threading.Thread):
         self.expectingNodeReply = False
         self.expectingPing = False
         self.sendLock = threading.RLock()
+        self.nodeID = "tracker"
         
         
     def trackerLoop(self):
@@ -384,8 +409,11 @@ class TrackerConnectionThread(threading.Thread):
                 if self.debug:
                     print "Node {0} received message {1} from tracker.".format(self.thisNode.idNum, response)
                 if dataSize != "" and response != "":
+                    event = MessageHandledEvent()
                     self.thisNode.handleReceivedTracker(inPacketData = response)
                     self.expectingPing = False
+                    if self.debug and not event.isSet():
+                        print "Error: Message not handled."
                 else:
                     dcFlag = True
             #self.sendLock.release()
@@ -446,3 +474,23 @@ class NodeReplyEvent():
     def wait(self, timeout = None):
         if self._event.wait():
             return self._success
+            
+class MessageHandledEvent():
+    def __init__(self):
+        self._condition = threading.Event()
+        self.message = None
+        self.success = False
+        
+    def isSet(self):
+        return self._event.isSet()
+    
+    def set(self, success = True, message = None):
+        self.success = success
+        self.message = message
+        return self._event.set()
+    
+    def clear(self):
+        return self._event.clear()
+        
+    def wait(self, timeout = None):
+        return self._event.wait()

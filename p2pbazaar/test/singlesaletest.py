@@ -7,11 +7,11 @@ from p2pbazaar.sellernode import SellerNode
 if __name__ == "__main__":
     
     startTime = time.time()
-    tracker = Tracker(debug = False)
+    tracker = Tracker(debug = True)
     print tracker.startup()
     #time.sleep(1)
     print "Tracker.startup() done. Time elapsed: {0}s".format(time.time()-startTime)
-    sellerNode = SellerNode(debug = False, itemList = ["shoes", "socks", "plutonium"])
+    sellerNode = SellerNode(debug = True, itemList = ["shoes", "socks", "plutonium"])
     sellerNode.setUpShop()
     #time.sleep(1)
     print "SellerNode.setUpShop() done. Time elapsed: {0}s".format(time.time()-startTime)
